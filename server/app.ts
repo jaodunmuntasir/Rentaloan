@@ -1,7 +1,9 @@
-import express, { Express } from "express";
-import cors from "cors";
-import helmet from "helmet";
-import dotenv from "dotenv";
+import express, { Express } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import dotenv from 'dotenv';
+import authRoutes from './routes/auth';
+import sequelize from './models';
 
 dotenv.config();
 
@@ -13,15 +15,26 @@ app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Routes (to be added)
-// app.use('/api/auth', require('./routes/auth'));
-// app.use('/api/rental', require('./routes/rental'));
-// app.use('/api/loan', require('./routes/loan'));
+// Routes
+app.use('/api/auth', authRoutes);
+// More routes will be added later
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Initialize database and start server
+const startServer = async () => {
+  try {
+    await sequelize.sync();
+    console.log('Database synchronized successfully');
+    
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+  }
+};
+
+startServer();
 
 export default app;

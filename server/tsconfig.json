@@ -4,10 +4,15 @@
     "module": "commonjs",
     "outDir": "./dist",
     "rootDir": "./",
+    "baseUrl": "./server",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@models/*": ["models/*"]
+    }
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules"]
