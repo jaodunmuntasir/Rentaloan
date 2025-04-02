@@ -1,11 +1,13 @@
 # Development Checklist for Blockchain-Based Rental Loan System
 
 ## 1. Smart Contract Development and Deployment
-- [x] Setup Hardhat environment (already in place)
-- [ ] Deploy smart contracts to local Hardhat network
-  - [ ] Run `npm run start:hardhat` to start the local Hardhat node
-  - [ ] Execute `npm run deploy:contracts` to deploy contracts
-  - [ ] Verify contract addresses are saved in config/contractAddresses.json
+- [x] Setup Hardhat environment (external)
+- [x] Deploy smart contracts to local Hardhat network (manually completed)
+  - [x] Factory contracts deployed at:
+    - RentalAgreementFactory: 0x5fbdb2315678afecb367f032d93f642f64180aa3
+    - LoanAgreementFactory: 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512
+  - [x] Execute `npm run deploy:contracts` to verify and save contract addresses
+  - [x] Verify contract addresses are saved in config/contractAddresses.json
 
 ## 2. Backend Development
 - [x] Basic Express server setup (already in place)
@@ -143,5 +145,44 @@
 - [ ] Document API endpoints
 - [ ] Document smart contract functions
 - [ ] Create workflow diagrams for main processes
+
+# Using the Project with External Hardhat Node
+
+This project has been updated to work with an externally running Hardhat node and manually deployed contracts.
+
+## Prerequisites
+
+1. Have Hardhat installed globally or in another project
+2. Have contracts already deployed on a Hardhat node at the following addresses:
+   - RentalAgreementFactory: 0x5fbdb2315678afecb367f032d93f642f64180aa3
+   - LoanAgreementFactory: 0xe7f1725e7734ce288f8367e1bb143e90bb3f0512
+
+## Steps to Run the Project
+
+1. **Start Hardhat Node Externally**
+   Run the following command in a separate terminal with Hardhat installed:
+   ```
+   npx hardhat node
+   ```
+   This will start a local Hardhat blockchain at http://127.0.0.1:8545/
+
+2. **Check Connection and Save Contract Addresses**
+   With the Hardhat node running:
+   ```
+   npm run deploy:contracts
+   ```
+   This will check the connection to the Hardhat node and save the contract addresses to `config/contractAddresses.json`.
+
+3. **Start the Application**
+   Start both frontend and backend:
+   ```
+   npm run dev
+   ```
+
+## Notes for Development
+
+- The deployment script only checks that the Hardhat node is running and saves the contract addresses
+- No verification of contract artifacts is performed, so contracts can be deployed from any source (e.g., Remix)
+- All blockchain transactions will be executed on the external Hardhat node
 
 This checklist provides a structured approach to implement the blockchain-based rental loan system focusing on a minimal but fully functional implementation for local Hardhat development. The plan prioritizes core functionality while ensuring proper integration between smart contracts, backend services, and frontend components.

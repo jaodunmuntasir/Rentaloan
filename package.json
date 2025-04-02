@@ -3,31 +3,21 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start:hardhat": "npx hardhat node",
-    "deploy:contracts": "npx hardhat run scripts/deploy.ts --network localhost",
+    "deploy:contracts": "ts-node scripts/deploy.ts",
     "start:server": "cd server && npm run dev",
     "start:client": "cd client && npm start",
-    "dev": "concurrently \"npm run start:hardhat\" \"npm run start:server\" \"npm run start:client\""
+    "dev": "concurrently \"npm run start:server\" \"npm run start:client\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.2.3",
-    "@nomiclabs/hardhat-waffle": "^2.0.6",
     "@openzeppelin/contracts": "^5.2.0",
-    "@typechain/ethers-v6": "^0.5.1",
-    "@typechain/hardhat": "^9.1.0",
-    "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.17",
-    "chai": "^5.2.0",
     "concurrently": "^7.6.0",
     "dotenv": "^16.4.7",
-    "ethereum-waffle": "^4.0.10",
-    "hardhat": "^2.22.19",
     "ts-node": "^10.9.2",
-    "typechain": "^8.3.2",
     "typescript": "^5.8.2"
   },
   "dependencies": {
