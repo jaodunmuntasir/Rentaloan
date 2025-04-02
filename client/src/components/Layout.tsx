@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
+import Navigation from './Navigation';
 
 const Layout: React.FC = () => {
   const { logout } = useAuth();
@@ -38,8 +39,7 @@ const Layout: React.FC = () => {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/rental', label: 'Rentals' },
-    { path: '/loan/requests', label: 'Loan Requests' },
-    { path: '/loan/agreements', label: 'Loan Agreements' },
+    { path: '/loan', label: 'Loans' },
     { path: '/profile', label: 'Profile' },
   ];
 
@@ -134,20 +134,7 @@ const Layout: React.FC = () => {
         {isMobileMenuOpen && (
           <div className="sm:hidden">
             <div className="pt-2 pb-3 space-y-1">
-              {navItems.map((item) => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`${
-                    location.pathname.startsWith(item.path)
-                      ? 'bg-blue-50 border-blue-500 text-blue-700'
-                      : 'border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700'
-                  } block pl-3 pr-4 py-2 border-l-4 text-base font-medium`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              <Navigation />
             </div>
 
             {/* Wallet and user actions for mobile */}
@@ -181,8 +168,18 @@ const Layout: React.FC = () => {
 
       {/* Page content */}
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-4 sm:px-0">
-          <Outlet />
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* Sidebar navigation on desktop */}
+          <div className="hidden md:block w-64 shrink-0">
+            <div className="bg-white rounded-lg shadow p-4">
+              <Navigation />
+            </div>
+          </div>
+          
+          {/* Main content */}
+          <div className="flex-1 px-4 py-4 sm:px-0">
+            <Outlet />
+          </div>
         </div>
       </main>
 

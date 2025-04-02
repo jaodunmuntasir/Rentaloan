@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { useContracts } from '../../contexts/ContractContext';
+import React, { useState } from 'react';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card';
-import { Input } from '../ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Slider } from '../ui/slider';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
@@ -23,8 +21,6 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
   borrowerRequestedDuration,
   onSubmit
 }) => {
-  const { loanFactory } = useContracts();
-  
   // State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

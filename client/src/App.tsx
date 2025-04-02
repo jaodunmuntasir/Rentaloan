@@ -24,6 +24,11 @@ import NotFound from './pages/NotFound';
 import Layout from './components/Layout';
 import { useAuth } from './contexts/AuthContext';
 import RequestDetail from './pages/loan/RequestDetail';
+import Loan from './pages/loan';
+import RequestList from './pages/loan/RequestList';
+import RequestCreate from './pages/loan/RequestCreate';
+import AgreementList from './pages/loan/AgreementList';
+import AgreementDetail from './pages/loan/AgreementDetail';
 
 // Inline PrivateRoute component
 const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -74,21 +79,13 @@ function App() {
                 </Route>
                 
                 {/* Loan routes */}
-                <Route path="loan">
-                  <Route index element={<Navigate to="/loan/request" replace />} />
-                  
-                  {/* Loan Requests */}
-                  <Route path="request">
-                    <Route index element={<LoanRequestList />} />
-                    <Route path=":address" element={<RequestDetail />} />
-                    <Route path="create" element={<LoanRequestCreate />} />
-                  </Route>
-                  
-                  {/* Loan Agreements */}
-                  <Route path="agreements">
-                    <Route index element={<LoanAgreementList />} />
-                    <Route path=":address" element={<LoanAgreementDetail />} />
-                  </Route>
+                <Route path="loan" element={<Loan />}>
+                  <Route index element={<Navigate to="/loan/agreements" replace />} />
+                  <Route path="agreements" element={<AgreementList />} />
+                  <Route path="agreement/:address" element={<AgreementDetail />} />
+                  <Route path="requests" element={<RequestList />} />
+                  <Route path="request/create" element={<RequestCreate />} />
+                  <Route path="request/:address" element={<RequestDetail />} />
                 </Route>
               </Route>
               

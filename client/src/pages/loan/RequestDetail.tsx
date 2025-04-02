@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useContracts } from '../../contexts/ContractContext';
 import CreateLoanOffer from '../../components/loan/CreateLoanOffer';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
@@ -17,10 +16,8 @@ import {
   Clock, 
   CreditCard, 
   GanttChart,
-  ArrowLeft,
-  ChevronRight
+  ArrowLeft
 } from 'lucide-react';
-import { ethers } from 'ethers';
 
 // Types
 interface LoanOffer {
@@ -51,7 +48,6 @@ const LoanRequestDetail: React.FC = () => {
   const { address } = useParams<{ address: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { loanFactory } = useContracts();
   
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(true);

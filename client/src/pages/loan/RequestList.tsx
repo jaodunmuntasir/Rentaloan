@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useContracts } from '../../contexts/ContractContext';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardHeader } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { Input } from '../../components/ui/input';
@@ -13,7 +12,6 @@ import {
   Search,
   Filter,
   CreditCard,
-  Clock,
   ArrowUpDown,
   ChevronRight,
   Loader2,
@@ -38,7 +36,6 @@ interface LoanRequest {
 const LoanRequestList: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { loanFactory } = useContracts();
   
   // State
   const [loading, setLoading] = useState(true);

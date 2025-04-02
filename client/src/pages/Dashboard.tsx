@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { UserApi } from '../services/api.service';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/card';
+import { ArrowRight } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { CreditCard, ChevronRight } from 'lucide-react';
 
 interface DashboardData {
   role: string;
@@ -251,6 +255,88 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-500">No recent activity.</p>
         )}
       </div>
+
+      {/* Loan Summary */}
+      <Card className="col-span-1 md:col-span-2">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xl">
+            <Link to="/loan" className="flex items-center gap-2 hover:text-primary transition-colors">
+              <CreditCard className="h-5 w-5" />
+              Loan Activity
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </CardTitle>
+          <CardDescription>Overview of your loan activities</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">As Borrower</p>
+                <div className="rounded-lg border p-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Active Loans</p>
+                      <p className="text-2xl font-bold">2</p>
+                    </div>
+                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Next Payment</p>
+                <div className="rounded-lg border p-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">123 Main St</p>
+                    <p className="text-sm text-muted-foreground">Due in 7 days</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">0.22 ETH</p>
+                    <Link to="/loan/agreement/0x1234567890123456789012345678901234567890" className="text-sm text-primary">
+                      Pay Now
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">As Lender</p>
+                <div className="rounded-lg border p-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium">Active Loans</p>
+                      <p className="text-2xl font-bold">1</p>
+                    </div>
+                    <ArrowRight className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Loan Opportunities</p>
+                <div className="rounded-lg border p-3 flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">Open Requests</p>
+                    <p className="text-sm text-muted-foreground">5 new requests</p>
+                  </div>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/loan/requests">View All</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-4">
+            <Button variant="outline" size="sm" className="w-full" asChild>
+              <Link to="/loan">View All Loan Activity</Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
