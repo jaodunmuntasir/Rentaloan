@@ -428,7 +428,7 @@ router.post('/offer/:id/accept', authenticate, isRenter, async (req: Request, re
   }
 });
 
-// Withdraw loan offer (lender)
+// Withdraw loan offer
 // @ts-ignore
 router.post('/offer/:id/withdraw', authenticate, isLender, async (req: Request, res: Response) => {
   try {
@@ -440,7 +440,12 @@ router.post('/offer/:id/withdraw', authenticate, isLender, async (req: Request, 
     }
     
     // Find the loan offer
-    const loanOffer = await LoanOffer.findByPk(id);
+    const loanOffer = await LoanOffer.findByPk(id, {
+      include: [
+        { model: LoanRequest },
+        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] }
+      ]
+    });
     
     if (!loanOffer) {
       return res.status(404).json({ message: 'Loan offer not found' });
@@ -448,19 +453,25 @@ router.post('/offer/:id/withdraw', authenticate, isLender, async (req: Request, 
     
     // Check if the user is the lender for this offer
     if (loanOffer.lenderId !== user.id) {
-      return res.status(403).json({ message: 'Only the lender can withdraw this loan offer' });
+      return res.status(403).json({ message: 'Only the lender can withdraw this offer' });
     }
     
-    // Check if the loan offer is still pending
-    if (loanOffer.status !== LoanOfferStatus.PENDING) {
-      return res.status(400).json({ message: 'Loan offer is no longer pending' });
+    // Check if the offer is in a state that allows withdrawal
+    if (loanOffer.status === LoanOfferStatus.ACCEPTED) {
+      return res.status(400).json({ message: 'Cannot withdraw an accepted offer' });
     }
     
-    // Update the loan offer status
+    if (loanOffer.status === LoanOfferStatus.WITHDRAWN) {
+      return res.status(400).json({ message: 'Offer is already withdrawn' });
+    }
+    
+    // Update the offer status to withdrawn
     await loanOffer.update({ status: LoanOfferStatus.WITHDRAWN });
     
     res.json({
       message: 'Loan offer withdrawn successfully',
+      offerId: loanOffer.id,
+      status: loanOffer.status
     });
   } catch (error) {
     console.error('Error withdrawing loan offer:', error);
@@ -539,20 +550,37 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// Initialize loan (lender)
+// Initialize loan (lender transfers funds to borrower)
 // @ts-ignore
 router.post('/:address/initialize', authenticate, isLender, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
+    const { amount } = req.body;
+    
+    if (!amount) {
+      return res.status(400).json({ message: 'Loan amount is required' });
+    }
     
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Find the loan agreement in the database
+    // Find the loan agreement
     const loanAgreement = await LoanAgreement.findOne({
-      where: { contractAddress: address }
+      where: { contractAddress: address },
+      include: [
+        { 
+          model: User, 
+          as: 'borrower', 
+          attributes: ['id', 'email', 'walletAddress'] 
+        },
+        { 
+          model: User, 
+          as: 'lender', 
+          attributes: ['id', 'email', 'walletAddress'] 
+        }
+      ]
     });
     
     if (!loanAgreement) {
@@ -564,44 +592,48 @@ router.post('/:address/initialize', authenticate, isLender, async (req: Request,
       return res.status(403).json({ message: 'Only the lender can initialize this loan' });
     }
     
-    // Check if the loan is in CREATED state
+    // Check if the loan agreement is in CREATED state
     if (loanAgreement.status !== LoanAgreementStatus.CREATED) {
-      return res.status(400).json({ message: 'Loan agreement has already been initialized' });
+      return res.status(400).json({ message: 'Loan agreement is not in the correct state for initialization' });
     }
     
-    // Initialize the loan on the blockchain
+    // Verify the amount matches the loan agreement
+    if (parseFloat(loanAgreement.amount.toString()) !== parseFloat(amount)) {
+      return res.status(400).json({ 
+        message: 'Amount does not match the loan agreement',
+        expected: loanAgreement.amount,
+        provided: amount
+      });
+    }
+    
+    // Initialize the loan on the blockchain (transfer funds to borrower)
     const result = await blockchainService.initializeLoan(
       address,
       user.walletAddress,
-      loanAgreement.amount.toString()
+      amount.toString()
     );
     
-    // Update the loan agreement in the database
-    await loanAgreement.update({
+    // Update loan agreement status
+    await loanAgreement.update({ 
       status: LoanAgreementStatus.ACTIVE,
       startDate: new Date()
     });
     
-    // Record the payment in the database
-    const payment = await Payment.create({
+    // Record the payment
+    await Payment.create({
       loanAgreementId: loanAgreement.id,
       payerId: user.id,
       recipientId: loanAgreement.borrowerId,
-      amount: loanAgreement.amount,
+      amount,
       txHash: result.transactionHash,
       type: PaymentType.LOAN_INITIALIZATION,
-      month: null,
       paymentDate: new Date()
     });
     
     res.json({
       message: 'Loan initialized successfully',
-      payment: {
-        id: payment.id,
-        amount: payment.amount,
-        type: payment.type,
-        transactionHash: payment.txHash
-      }
+      transactionHash: result.transactionHash,
+      status: loanAgreement.status
     });
   } catch (error) {
     console.error('Error initializing loan:', error);
@@ -612,15 +644,15 @@ router.post('/:address/initialize', authenticate, isLender, async (req: Request,
   }
 });
 
-// Make loan repayment (borrower)
+// Make a loan repayment
 // @ts-ignore
-router.post('/:address/repay', authenticate, isRenter, async (req: Request, res: Response) => {
+router.post('/:address/repay', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
-    const { month } = req.body;
+    const { amount, month } = req.body;
     
-    if (!month) {
-      return res.status(400).json({ message: 'Month is required' });
+    if (!amount) {
+      return res.status(400).json({ message: 'Repayment amount is required' });
     }
     
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
@@ -628,9 +660,21 @@ router.post('/:address/repay', authenticate, isRenter, async (req: Request, res:
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Find the loan agreement in the database
+    // Find the loan agreement
     const loanAgreement = await LoanAgreement.findOne({
-      where: { contractAddress: address }
+      where: { contractAddress: address },
+      include: [
+        { 
+          model: User, 
+          as: 'borrower', 
+          attributes: ['id', 'email', 'walletAddress'] 
+        },
+        { 
+          model: User, 
+          as: 'lender', 
+          attributes: ['id', 'email', 'walletAddress'] 
+        }
+      ]
     });
     
     if (!loanAgreement) {
@@ -639,61 +683,98 @@ router.post('/:address/repay', authenticate, isRenter, async (req: Request, res:
     
     // Check if the user is the borrower for this agreement
     if (loanAgreement.borrowerId !== user.id) {
-      return res.status(403).json({ message: 'Only the borrower can make repayments' });
+      return res.status(403).json({ message: 'Only the borrower can make repayments on this loan' });
     }
     
-    // Check if the loan is in ACTIVE state
+    // Check if the loan agreement is in ACTIVE state
     if (loanAgreement.status !== LoanAgreementStatus.ACTIVE) {
-      return res.status(400).json({ message: 'Loan agreement is not active' });
+      return res.status(400).json({ message: 'Cannot make repayment - loan is not active' });
     }
     
-    // Get the repayment schedule to determine the amount
-    const repaymentSchedule = await blockchainService.getRepaymentSchedule(address);
-    const repaymentInfo = repaymentSchedule.find(r => r.month === Number(month));
+    // Get on-chain loan details to verify payment amount and month
+    const onChainDetails = await blockchainService.getLoanAgreementDetails(address);
     
-    if (!repaymentInfo) {
-      return res.status(400).json({ message: 'Invalid repayment month' });
-    }
-    
-    if (repaymentInfo.isPaid) {
-      return res.status(400).json({ message: 'This repayment has already been made' });
+    // For monthly payments, verify the month and amount
+    let paymentMonth = null;
+    if (month !== undefined) {
+      paymentMonth = parseInt(month);
+      
+      // Verify the month is valid
+      const lastPaidMonth = parseInt(onChainDetails.lastPaidMonth.toString());
+      if (paymentMonth <= lastPaidMonth) {
+        return res.status(400).json({ 
+          message: 'Cannot make payment for a month that is already paid',
+          lastPaidMonth
+        });
+      }
+      
+      if (paymentMonth > lastPaidMonth + 1) {
+        return res.status(400).json({ 
+          message: 'Cannot make payment for a future month',
+          currentMonth: lastPaidMonth + 1
+        });
+      }
+      
+      // Check if the amount matches the monthly installment
+      if (parseFloat(amount) !== parseFloat(onChainDetails.monthlyPayment)) {
+        return res.status(400).json({ 
+          message: 'Amount does not match the monthly installment',
+          expected: onChainDetails.monthlyPayment,
+          provided: amount
+        });
+      }
+    } else {
+      // Full or partial repayment - calculate remaining balance
+      const totalDue = calculateRemainingBalance(onChainDetails);
+      
+      if (parseFloat(amount) > totalDue) {
+        return res.status(400).json({ 
+          message: 'Amount exceeds the remaining balance',
+          remainingBalance: totalDue,
+          provided: amount
+        });
+      }
     }
     
     // Make the repayment on the blockchain
     const result = await blockchainService.makeRepayment(
       address,
       user.walletAddress,
-      month,
-      repaymentInfo.amount
+      paymentMonth !== null ? paymentMonth : 0,
+      amount.toString()
     );
     
-    // Record the payment in the database
+    // Record the payment
     const payment = await Payment.create({
       loanAgreementId: loanAgreement.id,
       payerId: user.id,
       recipientId: loanAgreement.lenderId,
-      amount: parseFloat(repaymentInfo.amount),
+      amount,
       txHash: result.transactionHash,
       type: PaymentType.LOAN_REPAYMENT,
-      month,
+      month: paymentMonth,
       paymentDate: new Date()
     });
     
-    // Check if this was the final repayment
-    const onChainDetails = await blockchainService.getLoanAgreementDetails(address);
-    if (Number(onChainDetails.status) === 1) { // 1 = CLOSED
-      await loanAgreement.update({ status: LoanAgreementStatus.CLOSED });
+    // Check if the loan is now fully paid
+    const updatedDetails = await blockchainService.getLoanAgreementDetails(address);
+    const isFullyPaid = parseInt(updatedDetails.lastPaidMonth.toString()) >= parseInt(updatedDetails.duration.toString()) - 1;
+    
+    if (isFullyPaid) {
+      await loanAgreement.update({ 
+        status: LoanAgreementStatus.CLOSED
+      });
     }
     
     res.json({
-      message: 'Loan repayment made successfully',
+      message: 'Loan repayment successful',
       payment: {
         id: payment.id,
         amount: payment.amount,
-        type: payment.type,
         month: payment.month,
         transactionHash: payment.txHash
-      }
+      },
+      loanStatus: loanAgreement.status
     });
   } catch (error) {
     console.error('Error making loan repayment:', error);
@@ -703,5 +784,16 @@ router.post('/:address/repay', authenticate, isRenter, async (req: Request, res:
     });
   }
 });
+
+// Helper function to calculate remaining balance
+function calculateRemainingBalance(loanDetails: any): number {
+  const loanAmount = parseFloat(loanDetails.loanAmount);
+  const monthlyPayment = parseFloat(loanDetails.monthlyPayment);
+  const duration = parseInt(loanDetails.duration.toString());
+  const lastPaidMonth = parseInt(loanDetails.lastPaidMonth.toString());
+  
+  const remainingMonths = duration - lastPaidMonth - 1;
+  return monthlyPayment * remainingMonths;
+}
 
 export default router; 

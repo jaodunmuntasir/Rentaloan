@@ -4,6 +4,7 @@ import { authenticate } from "../middleware/auth";
 import { ethers } from "ethers";
 import db from "../models";
 import { User } from "../models/user.model";
+import { Op } from "sequelize";
 
 const router = express.Router();
 
@@ -86,5 +87,58 @@ const getUserProfile: RequestHandler = async (req, res): Promise<void> => {
 };
 
 router.get("/profile", authenticate as RequestHandler, getUserProfile);
+
+// Update user profile
+const updateUserProfile: RequestHandler = async (req, res): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const { name, email } = req.body;
+    
+    // Find user
+    const user = await User.findOne({ where: { firebaseId: req.user.uid } });
+    if (!user) {
+      res.status(404).json({ message: "User not found" });
+      return;
+    }
+
+    // Update user fields
+    const updates: any = {};
+    if (name) updates.name = name;
+    if (email) {
+      // Check if email is already in use
+      const existingUser = await User.findOne({ where: { email, firebaseId: { [Op.ne]: req.user.uid } } });
+      if (existingUser) {
+        res.status(400).json({ message: "Email is already in use" });
+        return;
+      }
+      
+      // Update email in Firebase
+      await admin.auth().updateUser(req.user.uid, { email });
+      updates.email = email;
+    }
+
+    // Update user in database
+    await user.update(updates);
+
+    res.json({
+      message: "Profile updated successfully",
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        walletAddress: user.walletAddress,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Failed to update profile", error: (error as Error).message });
+  }
+};
+
+router.put("/profile", authenticate as RequestHandler, updateUserProfile);
 
 export default router;

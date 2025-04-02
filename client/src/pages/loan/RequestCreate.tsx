@@ -248,7 +248,7 @@ const RequestCreate: React.FC = () => {
       </div>
       
       <div>
-        <h1 className="text-3xl font-bold">Create Loan Request</h1>
+      <h1 className="text-3xl font-bold">Create Loan Request</h1>
         <p className="text-muted-foreground mt-1">Request funding using your rental property as collateral</p>
       </div>
       

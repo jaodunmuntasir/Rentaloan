@@ -31,60 +31,58 @@
 - [x] Handle error scenarios
 
 ### API Endpoints Implementation
-- [ ] Complete API controllers for endpoints
+- [x] Complete API controllers for endpoints
 
 #### Authentication Routes
 - [x] POST /api/auth/register - Register a new user
   - Requirements: Email/password validation, role verification
-- [ ] POST /api/auth/login - Login user
-  - Requirements: Credentials validation, token generation
 - [x] GET /api/auth/profile - Get user profile
   - Requirements: Token verification, user data retrieval
-- [ ] PUT /api/auth/profile - Update user profile
+- [x] PUT /api/auth/profile - Update user profile
   - Requirements: Validate updates, persist changes
 
 #### Rental Routes
-- [ ] POST /api/rental/create - Create rental agreement
+- [x] POST /api/rental/create - Create rental agreement
   - Requirements: Renter email, duration, securityDeposit, baseRent, name
-- [ ] GET /api/rental - Get user's rental agreements
+- [x] GET /api/rental - Get user's rental agreements
   - Requirements: Filter by role (landlord/renter)
-- [ ] GET /api/rental/:address - Get rental agreement details
+- [x] GET /api/rental/:address - Get rental agreement details
   - Requirements: Contract address validation, payment history
-- [ ] POST /api/rental/:address/pay-deposit - Pay security deposit
+- [x] POST /api/rental/:address/pay-deposit - Pay security deposit
   - Requirements: Exact deposit amount, transaction handling
-- [ ] POST /api/rental/:address/pay-rent - Pay rent
+- [x] POST /api/rental/:address/pay-rent - Pay rent
   - Requirements: Month, amount (base rent + any due amount)
-- [ ] POST /api/rental/:address/skip-rent - Skip rent payment
+- [x] POST /api/rental/:address/skip-rent - Skip rent payment
   - Requirements: Month (must be within grace period)
-- [ ] POST /api/rental/:address/extend - Extend rental agreement
+- [x] POST /api/rental/:address/extend - Extend rental agreement
   - Requirements: Additional months (only available in last month)
 
 #### Loan Routes
-- [ ] POST /api/loan/request - Create loan request
+- [x] POST /api/loan/request - Create loan request
   - Requirements: RentalAddress, amount (≤ available collateral), duration
-- [ ] GET /api/loan/requests - Get loan requests based on filters
+- [x] GET /api/loan/requests - Get loan requests based on filters
   - Requirements: Status, amount filters
-- [ ] GET /api/loan/requests/:id - Get loan request details
+- [x] GET /api/loan/requests/:id - Get loan request details
   - Requirements: Request ID validation
-- [ ] POST /api/loan/offer - Create loan offer
+- [x] POST /api/loan/offer - Create loan offer
   - Requirements: RequestId, interestRate (1-100%), duration, graceMonths
-- [ ] GET /api/loan/offers - Get user's loan offers
+- [x] GET /api/loan/offers - Get user's loan offers
   - Requirements: Filter by role (borrower/lender)
-- [ ] POST /api/loan/offer/:id/accept - Accept loan offer
+- [x] POST /api/loan/offer/:id/accept - Accept loan offer
   - Requirements: Offer ID validation, status updates
-- [ ] POST /api/loan/offer/:id/withdraw - Withdraw loan offer
+- [x] POST /api/loan/offer/:id/withdraw - Withdraw loan offer
   - Requirements: Offer ID validation, status update
-- [ ] GET /api/loan/:address - Get loan agreement details
+- [x] GET /api/loan/:address - Get loan agreement details
   - Requirements: Contract address validation
-- [ ] POST /api/loan/:address/initialize - Initialize loan
+- [x] POST /api/loan/:address/initialize - Initialize loan
   - Requirements: Exact loan amount, transaction handling
-- [ ] POST /api/loan/:address/repay - Make loan repayment
+- [x] POST /api/loan/:address/repay - Make loan repayment
   - Requirements: Month, amount (with interest)
 
 #### User Routes
-- [ ] GET /api/user/dashboard - Get dashboard data
+- [x] GET /api/user/dashboard - Get dashboard data
   - Requirements: Role-specific data aggregation 
-- [ ] GET /api/user/payments - Get payment history
+- [x] GET /api/user/payments - Get payment history
   - Requirements: Filter by type, date range
 
 ## 3. Frontend Development

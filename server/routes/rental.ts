@@ -37,6 +37,7 @@ const isRenter = async (req: Request, res: Response, next: express.NextFunction)
 };
 
 // Create rental agreement
+// @ts-ignore
 router.post('/create', authenticate, isLandlord, async (req: Request, res: Response) => {
   try {
     const { renterEmail, duration, securityDeposit, baseRent, name } = req.body;
@@ -104,6 +105,7 @@ router.post('/create', authenticate, isLandlord, async (req: Request, res: Respo
 });
 
 // Get all rental agreements for the user
+// @ts-ignore
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
@@ -143,6 +145,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 // Get a specific rental agreement
+// @ts-ignore
 router.get('/:address', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
@@ -200,6 +203,7 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
 });
 
 // Pay security deposit
+// @ts-ignore
 router.post('/:address/pay-deposit', authenticate, isRenter, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
@@ -273,6 +277,7 @@ router.post('/:address/pay-deposit', authenticate, isRenter, async (req: Request
 });
 
 // Pay rent
+// @ts-ignore
 router.post('/:address/pay-rent', authenticate, isRenter, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
@@ -356,6 +361,7 @@ router.post('/:address/pay-rent', authenticate, isRenter, async (req: Request, r
 });
 
 // Skip rent
+// @ts-ignore
 router.post('/:address/skip-rent', authenticate, isRenter, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
@@ -414,13 +420,14 @@ router.post('/:address/skip-rent', authenticate, isRenter, async (req: Request, 
 });
 
 // Extend rental agreement
-router.post('/:address/extend', authenticate, isLandlord, async (req: Request, res: Response) => {
+// @ts-ignore
+router.post('/:address/extend', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
     const { additionalMonths } = req.body;
     
     if (!additionalMonths || additionalMonths <= 0) {
-      return res.status(400).json({ message: 'Additional months must be greater than 0' });
+      return res.status(400).json({ message: 'Additional months must be a positive number' });
     }
     
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
@@ -428,12 +435,12 @@ router.post('/:address/extend', authenticate, isLandlord, async (req: Request, r
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Find the rental agreement in the database
+    // Find the rental agreement
     const agreement = await RentalAgreement.findOne({
       where: { contractAddress: address },
       include: [
-        { model: User, as: 'landlord' },
-        { model: User, as: 'renter' }
+        { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
       ]
     });
     
@@ -441,31 +448,41 @@ router.post('/:address/extend', authenticate, isLandlord, async (req: Request, r
       return res.status(404).json({ message: 'Rental agreement not found' });
     }
     
-    // Check if the user is the landlord for this agreement
-    if (agreement.landlordId !== user.id) {
-      return res.status(403).json({ message: 'Only the landlord can extend the agreement' });
+    // Check if the user is associated with this agreement
+    if (agreement.landlordId !== user.id && agreement.renterId !== user.id) {
+      return res.status(403).json({ message: 'You are not authorized to extend this agreement' });
     }
     
-    // Check if the agreement is in ACTIVE state
-    if (agreement.status !== RentalAgreementStatus.ACTIVE) {
-      return res.status(400).json({ message: 'Rental agreement is not active' });
+    // Get on-chain details to verify current month
+    const onChainDetails = await blockchainService.getRentalAgreementDetails(address);
+    
+    // Check if the agreement is in the last month of its term
+    const monthsPassed = parseInt(onChainDetails.lastPaidMonth.toString());
+    const duration = parseInt(onChainDetails.duration.toString());
+    
+    if (monthsPassed < duration - 1) { // 0-indexed months, so last month is duration-1
+      return res.status(400).json({ 
+        message: 'Rental agreement can only be extended in the last month of its term',
+        currentMonth: monthsPassed + 1, // Convert to 1-indexed for response
+        duration
+      });
     }
     
-    // Extend the rental agreement on the blockchain
+    // Extend the agreement on the blockchain
     const result = await blockchainService.extendRentalAgreement(
       address,
       user.walletAddress,
       additionalMonths
     );
     
-    // Update the rental agreement in the database
+    // Update the duration in the database
     await agreement.update({
       duration: agreement.duration + additionalMonths
     });
     
     res.json({
       message: 'Rental agreement extended successfully',
-      newDuration: agreement.duration + additionalMonths,
+      newDuration: agreement.duration,
       transactionHash: result.transactionHash
     });
   } catch (error) {
