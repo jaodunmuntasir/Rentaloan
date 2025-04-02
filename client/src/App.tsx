@@ -21,10 +21,27 @@ import LoanAgreementList from './pages/loan/AgreementList';
 import LoanAgreementDetail from './pages/loan/AgreementDetail';
 import ProfilePage from './pages/Profile';
 import NotFound from './pages/NotFound';
-
-// Components
-import PrivateRoute from './components/PrivateRoute';
 import Layout from './components/Layout';
+import { useAuth } from './contexts/AuthContext';
+
+// Inline PrivateRoute component
+const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const { currentUser, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen">
+        <div className="w-16 h-16 border-4 border-t-blue-500 border-b-blue-700 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+  
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+};
 
 function App() {
   return (
