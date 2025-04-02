@@ -133,53 +133,7 @@ export default config;
 ### 3. Smart Contract Deployment
 
 Create a deployment script at `scripts/deploy.ts`:
-
-```typescript
-import { ethers } from "hardhat";
-import * as fs from "fs";
-import * as path from "path";
-
-async function main() {
-  // Get the contract factories
-  const RentalAgreementFactory = await ethers.getContractFactory("RentalAgreementFactory");
-  const LoanAgreementFactory = await ethers.getContractFactory("LoanAgreementFactory");
-
-  // Deploy the contracts
-  console.log("Deploying RentalAgreementFactory...");
-  const rentalFactory = await RentalAgreementFactory.deploy();
-  await rentalFactory.deployed();
-  console.log("RentalAgreementFactory deployed to:", rentalFactory.address);
-
-  console.log("Deploying LoanAgreementFactory...");
-  const loanFactory = await LoanAgreementFactory.deploy();
-  await loanFactory.deployed();
-  console.log("LoanAgreementFactory deployed to:", loanFactory.address);
-
-  // Save contract addresses to a file
-  const addresses = {
-    rentalAgreementFactory: rentalFactory.address,
-    loanAgreementFactory: loanFactory.address
-  };
-
-  // Create config directory if it doesn't exist
-  if (!fs.existsSync(path.join(__dirname, "../config"))) {
-    fs.mkdirSync(path.join(__dirname, "../config"));
-  }
-
-  fs.writeFileSync(
-    path.join(__dirname, "../config/contractAddresses.json"),
-    JSON.stringify(addresses, null, 2)
-  );
-  console.log("Contract addresses saved to config/contractAddresses.json");
-}
-
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  });
-```
+Factory contracts are manually deployed and Hardhat node is manually started outside this project for global use.
 
 ### 4. Frontend Setup
 
@@ -579,7 +533,7 @@ Key contract features:
    - System calculates grace period automatically (security deposit / base rent)
    - Deploy contract to blockchain
 
-2. **Extend Agreement** (optional):
+2. **Extend Agreement**:
    - Available in the last month of the agreement
    - Add additional months to the duration
 
