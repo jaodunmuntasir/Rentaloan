@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import Navigation from './Navigation';
 import { Button } from './ui/button';
-import { Separator } from './ui/separator';
-import { Home, Wallet, LogOut, Menu, X } from 'lucide-react';
+// import { Separator } from './ui/separator';
+import { Home, Wallet, LogOut, Menu } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 

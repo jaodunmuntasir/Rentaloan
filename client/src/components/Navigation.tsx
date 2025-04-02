@@ -1,5 +1,5 @@
 import React from 'react';
-import { CreditCard, Banknote, Home, User, LayoutDashboard, Building, Coins } from 'lucide-react';
+import { CreditCard, User, LayoutDashboard, Building, Coins } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
