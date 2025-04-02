@@ -12,44 +12,45 @@
 ## 2. Backend Development
 - [x] Basic Express server setup (already in place)
 - [x] Firebase authentication setup (already in place)
-- [ ] Database Models Implementation
+- [x] Database Models Implementation
   - [x] User model (already implemented)
-  - [ ] RentalAgreement model
-    - [ ] Define schema with contractAddress, landlordId, renterId, name, status, etc.
-  - [ ] LoanRequest model
-    - [ ] Define schema with rentalAgreementId, requesterId, amount, duration, status
-  - [ ] LoanOffer model
-    - [ ] Define schema with loanRequestId, lenderId, interestRate, duration, graceMonths, status
-  - [ ] LoanAgreement model
-    - [ ] Define schema with contractAddress, borrowerId, lenderId, amount, etc.
-  - [ ] Payment model
-    - [ ] Define schema for tracking all payment transactions
+  - [x] RentalAgreement model
+    - [x] Define schema with contractAddress, landlordId, renterId, name, status, etc.
+  - [x] LoanRequest model
+    - [x] Define schema with rentalAgreementId, requesterId, amount, duration, status
+  - [x] LoanOffer model
+    - [x] Define schema with loanRequestId, lenderId, interestRate, duration, graceMonths, status
+  - [x] LoanAgreement model
+    - [x] Define schema with contractAddress, borrowerId, lenderId, amount, etc.
+  - [x] Payment model
+    - [x] Define schema for tracking all payment transactions
 
-- [ ] API Endpoints Implementation
-  - [x] Auth routes (already implemented)
-  - [ ] Rental routes
-    - [ ] POST /api/rental/create
-    - [ ] GET /api/rental
-    - [ ] GET /api/rental/:address
-    - [ ] POST /api/rental/:address/pay-deposit
-    - [ ] POST /api/rental/:address/pay-rent
-    - [ ] POST /api/rental/:address/skip-rent
-    - [ ] POST /api/rental/:address/extend
-  - [ ] Loan routes
-    - [ ] POST /api/loan/request
-    - [ ] GET /api/loan/requests
-    - [ ] GET /api/loan/requests/:id
-    - [ ] POST /api/loan/offer
-    - [ ] GET /api/loan/offers
-    - [ ] POST /api/loan/offer/:id/accept
-    - [ ] POST /api/loan/offer/:id/withdraw
-    - [ ] GET /api/loan/:address
-    - [ ] POST /api/loan/:address/initialize
-    - [ ] POST /api/loan/:address/repay
+## API Endpoints Implementation
 
-- [ ] Blockchain Interaction Services
-  - [ ] Create utilities for interacting with smart contracts
-  - [ ] Implement transaction signing and sending
+### Rental Routes
+- [x] POST /api/rental/create
+- [x] GET /api/rental
+- [x] GET /api/rental/:address
+- [x] POST /api/rental/:address/pay-deposit
+- [x] POST /api/rental/:address/pay-rent
+- [x] POST /api/rental/:address/skip-rent
+- [x] POST /api/rental/:address/extend
+
+### Loan Routes
+- [x] POST /api/loan/request
+- [x] GET /api/loan/requests
+- [x] GET /api/loan/requests/:id
+- [x] POST /api/loan/offer
+- [x] GET /api/loan/offers
+- [x] POST /api/loan/offer/:id/accept
+- [x] POST /api/loan/offer/:id/withdraw
+- [x] GET /api/loan/:address
+- [x] POST /api/loan/:address/initialize
+- [x] POST /api/loan/:address/repay
+
+- [x] Blockchain Interaction Services
+  - [x] Create utilities for interacting with smart contracts
+  - [x] Implement transaction signing and sending
   - [ ] Create service to listen for contract events
 
 ## 3. Frontend Development

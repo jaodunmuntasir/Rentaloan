@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
+import rentalRoutes from './routes/rental';
+import loanRoutes from './routes/loan';
 import sequelize from './models';
 
 dotenv.config();
@@ -17,6 +19,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/rental', rentalRoutes);
+app.use('/api/loan', loanRoutes);
 // More routes will be added later
 
 const PORT = process.env.PORT || 5000;

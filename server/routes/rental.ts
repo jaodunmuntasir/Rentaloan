@@ -1,0 +1,480 @@
+import express, { Request, Response } from 'express';
+import { authenticate } from '../middleware/auth';
+import { User } from '../models/user.model';
+import { RentalAgreement, RentalAgreementStatus } from '../models/rental-agreement.model';
+import { Payment } from '../models/payment.model';
+import { PaymentType } from '../models/payment.model';
+import blockchainService from '../services/blockchain.service';
+
+const router = express.Router();
+
+// Middleware to check if user is landlord
+const isLandlord = async (req: Request, res: Response, next: express.NextFunction) => {
+  try {
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user || user.role !== 'landlord') {
+      return res.status(403).json({ message: 'Only landlords can perform this action' });
+    }
+    next();
+  } catch (error) {
+    console.error('Error checking role:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Middleware to check if user is renter
+const isRenter = async (req: Request, res: Response, next: express.NextFunction) => {
+  try {
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user || user.role !== 'renter') {
+      return res.status(403).json({ message: 'Only renters can perform this action' });
+    }
+    next();
+  } catch (error) {
+    console.error('Error checking role:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Create rental agreement
+router.post('/create', authenticate, isLandlord, async (req: Request, res: Response) => {
+  try {
+    const { renterEmail, duration, securityDeposit, baseRent, name } = req.body;
+    
+    if (!renterEmail || !duration || !securityDeposit || !baseRent || !name) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+    
+    // Find the landlord
+    const landlord = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!landlord) {
+      return res.status(404).json({ message: 'Landlord not found' });
+    }
+    
+    // Find the renter by email
+    const renter = await User.findOne({ where: { email: renterEmail, role: 'renter' } });
+    if (!renter) {
+      return res.status(404).json({ message: 'Renter not found or not registered as a renter' });
+    }
+    
+    // Calculate grace period (securityDeposit / baseRent)
+    const gracePeriod = Math.floor(Number(securityDeposit) / Number(baseRent));
+    
+    // Create the rental agreement on the blockchain
+    const result = await blockchainService.createRentalAgreement(
+      landlord.walletAddress,
+      renter.walletAddress,
+      duration,
+      securityDeposit.toString(),
+      baseRent.toString(),
+      gracePeriod,
+      name
+    );
+    
+    // Store the rental agreement in the database
+    const rentalAgreement = await RentalAgreement.create({
+      contractAddress: result.contractAddress,
+      landlordId: landlord.id,
+      renterId: renter.id,
+      name,
+      status: RentalAgreementStatus.INITIALIZED,
+      duration,
+      securityDeposit,
+      baseRent,
+      gracePeriod
+    });
+    
+    res.status(201).json({
+      message: 'Rental agreement created successfully',
+      agreement: {
+        id: rentalAgreement.id,
+        contractAddress: rentalAgreement.contractAddress,
+        name: rentalAgreement.name,
+        status: rentalAgreement.status,
+        transactionHash: result.transactionHash
+      }
+    });
+  } catch (error) {
+    console.error('Error creating rental agreement:', error);
+    res.status(500).json({
+      message: 'Failed to create rental agreement',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Get all rental agreements for the user
+router.get('/', authenticate, async (req: Request, res: Response) => {
+  try {
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    let agreements;
+    if (user.role === 'landlord') {
+      agreements = await RentalAgreement.findAll({
+        where: { landlordId: user.id },
+        include: [
+          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+        ]
+      });
+    } else if (user.role === 'renter') {
+      agreements = await RentalAgreement.findAll({
+        where: { renterId: user.id },
+        include: [
+          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+        ]
+      });
+    } else {
+      return res.status(403).json({ message: 'Only landlords and renters can view rental agreements' });
+    }
+    
+    res.json({ agreements });
+  } catch (error) {
+    console.error('Error retrieving rental agreements:', error);
+    res.status(500).json({
+      message: 'Failed to retrieve rental agreements',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Get a specific rental agreement
+router.get('/:address', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+      ]
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Check if the user is associated with this agreement
+    if (agreement.landlordId !== user.id && agreement.renterId !== user.id) {
+      return res.status(403).json({ message: 'You are not authorized to view this agreement' });
+    }
+    
+    // Get on-chain data
+    const onChainDetails = await blockchainService.getRentalAgreementDetails(address);
+    
+    // Get payment history
+    const payments = await Payment.findAll({
+      where: { rentalAgreementId: agreement.id },
+      include: [
+        { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'recipient', attributes: ['id', 'email', 'walletAddress'] }
+      ],
+      order: [['paymentDate', 'DESC']]
+    });
+    
+    res.json({
+      agreement: {
+        ...agreement.toJSON(),
+        onChain: onChainDetails
+      },
+      payments
+    });
+  } catch (error) {
+    console.error('Error retrieving rental agreement:', error);
+    res.status(500).json({
+      message: 'Failed to retrieve rental agreement',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Pay security deposit
+router.post('/:address/pay-deposit', authenticate, isRenter, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'landlord' },
+        { model: User, as: 'renter' }
+      ]
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Check if the user is the renter for this agreement
+    if (agreement.renterId !== user.id) {
+      return res.status(403).json({ message: 'Only the renter can pay the security deposit' });
+    }
+    
+    // Check if the agreement is in INITIALIZED state
+    if (agreement.status !== RentalAgreementStatus.INITIALIZED) {
+      return res.status(400).json({ message: 'Security deposit already paid or contract closed' });
+    }
+    
+    // Pay the security deposit on the blockchain
+    const result = await blockchainService.paySecurityDeposit(
+      address,
+      user.walletAddress,
+      agreement.securityDeposit.toString()
+    );
+    
+    // Update the rental agreement status in the database
+    await agreement.update({ status: RentalAgreementStatus.ACTIVE });
+    
+    // Record the payment in the database
+    const payment = await Payment.create({
+      rentalAgreementId: agreement.id,
+      payerId: user.id,
+      recipientId: agreement.landlordId,
+      amount: agreement.securityDeposit,
+      txHash: result.transactionHash,
+      type: PaymentType.SECURITY_DEPOSIT,
+      month: null,
+      paymentDate: new Date()
+    });
+    
+    res.json({
+      message: 'Security deposit paid successfully',
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        type: payment.type,
+        transactionHash: payment.txHash
+      }
+    });
+  } catch (error) {
+    console.error('Error paying security deposit:', error);
+    res.status(500).json({
+      message: 'Failed to pay security deposit',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Pay rent
+router.post('/:address/pay-rent', authenticate, isRenter, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    const { month } = req.body;
+    
+    if (!month) {
+      return res.status(400).json({ message: 'Month is required' });
+    }
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'landlord' },
+        { model: User, as: 'renter' }
+      ]
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Check if the user is the renter for this agreement
+    if (agreement.renterId !== user.id) {
+      return res.status(403).json({ message: 'Only the renter can pay rent' });
+    }
+    
+    // Check if the agreement is in ACTIVE state
+    if (agreement.status !== RentalAgreementStatus.ACTIVE) {
+      return res.status(400).json({ message: 'Rental agreement is not active' });
+    }
+    
+    // Get on-chain data to calculate due amount
+    const onChainDetails = await blockchainService.getRentalAgreementDetails(address);
+    const dueAmount = parseFloat(onChainDetails.dueAmount);
+    const baseRent = parseFloat(onChainDetails.baseRent);
+    const totalAmount = dueAmount + baseRent;
+    
+    // Pay the rent on the blockchain
+    const result = await blockchainService.payRent(
+      address,
+      user.walletAddress,
+      month,
+      totalAmount.toString()
+    );
+    
+    // Record the payment in the database
+    const payment = await Payment.create({
+      rentalAgreementId: agreement.id,
+      payerId: user.id,
+      recipientId: agreement.landlordId,
+      amount: totalAmount,
+      txHash: result.transactionHash,
+      type: PaymentType.RENT,
+      month: month,
+      paymentDate: new Date()
+    });
+    
+    res.json({
+      message: 'Rent paid successfully',
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        type: payment.type,
+        month: payment.month,
+        transactionHash: payment.txHash
+      }
+    });
+  } catch (error) {
+    console.error('Error paying rent:', error);
+    res.status(500).json({
+      message: 'Failed to pay rent',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Skip rent
+router.post('/:address/skip-rent', authenticate, isRenter, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    const { month } = req.body;
+    
+    if (!month) {
+      return res.status(400).json({ message: 'Month is required' });
+    }
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'landlord' },
+        { model: User, as: 'renter' }
+      ]
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Check if the user is the renter for this agreement
+    if (agreement.renterId !== user.id) {
+      return res.status(403).json({ message: 'Only the renter can skip rent' });
+    }
+    
+    // Check if the agreement is in ACTIVE state
+    if (agreement.status !== RentalAgreementStatus.ACTIVE) {
+      return res.status(400).json({ message: 'Rental agreement is not active' });
+    }
+    
+    // Skip the rent on the blockchain
+    const result = await blockchainService.skipRent(
+      address,
+      user.walletAddress,
+      month
+    );
+    
+    res.json({
+      message: 'Rent skipped successfully',
+      transactionHash: result.transactionHash
+    });
+  } catch (error) {
+    console.error('Error skipping rent:', error);
+    res.status(500).json({
+      message: 'Failed to skip rent',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Extend rental agreement
+router.post('/:address/extend', authenticate, isLandlord, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    const { additionalMonths } = req.body;
+    
+    if (!additionalMonths || additionalMonths <= 0) {
+      return res.status(400).json({ message: 'Additional months must be greater than 0' });
+    }
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'landlord' },
+        { model: User, as: 'renter' }
+      ]
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Check if the user is the landlord for this agreement
+    if (agreement.landlordId !== user.id) {
+      return res.status(403).json({ message: 'Only the landlord can extend the agreement' });
+    }
+    
+    // Check if the agreement is in ACTIVE state
+    if (agreement.status !== RentalAgreementStatus.ACTIVE) {
+      return res.status(400).json({ message: 'Rental agreement is not active' });
+    }
+    
+    // Extend the rental agreement on the blockchain
+    const result = await blockchainService.extendRentalAgreement(
+      address,
+      user.walletAddress,
+      additionalMonths
+    );
+    
+    // Update the rental agreement in the database
+    await agreement.update({
+      duration: agreement.duration + additionalMonths
+    });
+    
+    res.json({
+      message: 'Rental agreement extended successfully',
+      newDuration: agreement.duration + additionalMonths,
+      transactionHash: result.transactionHash
+    });
+  } catch (error) {
+    console.error('Error extending rental agreement:', error);
+    res.status(500).json({
+      message: 'Failed to extend rental agreement',
+      error: (error as Error).message
+    });
+  }
+});
+
+export default router; 
