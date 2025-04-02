@@ -48,10 +48,21 @@
 - [x] POST /api/loan/:address/initialize
 - [x] POST /api/loan/:address/repay
 
+### User Routes
+- [x] GET /api/user/profile
+- [x] PUT /api/user/profile
+- [x] GET /api/user/dashboard
+- [x] GET /api/user/payments
+
 - [x] Blockchain Interaction Services
   - [x] Create utilities for interacting with smart contracts
   - [x] Implement transaction signing and sending
-  - [ ] Create service to listen for contract events
+  - [x] Error handling and receipt processing
+
+- [x] Event Services
+  - [x] Set up listeners for contract events
+  - [x] Process events and update database records
+  - [x] Handle error scenarios
 
 ## 3. Frontend Development
 - [x] UI components setup with shadcn/ui (already in place)

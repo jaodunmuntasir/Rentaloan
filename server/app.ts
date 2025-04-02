@@ -1,44 +1,55 @@
-import express, { Express } from 'express';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import rentalRoutes from './routes/rental';
 import loanRoutes from './routes/loan';
+import userRoutes from './routes/user';
 import sequelize from './models';
+import eventService from './services/event.service';
 
-dotenv.config();
-
-const app: Express = express();
+const app = express();
 
 // Middleware
-app.use(cors());
 app.use(helmet());
+app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/rental', rentalRoutes);
 app.use('/api/loan', loanRoutes);
-// More routes will be added later
+app.use('/api/user', userRoutes);
 
-const PORT = process.env.PORT || 5000;
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({
+    message: 'Internal Server Error',
+    error: process.env.NODE_ENV === 'production' ? 'An error occurred' : err.message
+  });
+});
+
+const PORT = process.env.PORT || 3000;
 
 // Initialize database and start server
-const startServer = async () => {
-  try {
-    await sequelize.sync();
-    console.log('Database synchronized successfully');
+sequelize.sync()
+  .then(() => {
+    console.log('Database synchronized');
+    // Initialize the event service after database is synchronized
+    eventService.initEventService();
     
     app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`Server is running on port ${PORT}`);
     });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-  }
-};
-
-startServer();
+  })
+  .catch(err => {
+    console.error('Failed to synchronize database:', err);
+  });
 
 export default app;
