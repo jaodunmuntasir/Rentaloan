@@ -15,150 +15,184 @@
 - [x] Database Models Implementation
   - [x] User model (already implemented)
   - [x] RentalAgreement model
-    - [x] Define schema with contractAddress, landlordId, renterId, name, status, etc.
   - [x] LoanRequest model
-    - [x] Define schema with rentalAgreementId, requesterId, amount, duration, status
   - [x] LoanOffer model
-    - [x] Define schema with loanRequestId, lenderId, interestRate, duration, graceMonths, status
   - [x] LoanAgreement model
-    - [x] Define schema with contractAddress, borrowerId, lenderId, amount, etc.
   - [x] Payment model
-    - [x] Define schema for tracking all payment transactions
 
-## API Endpoints Implementation
+### Blockchain Interaction
+- [x] Create utilities for interacting with smart contracts
+- [x] Implement transaction signing and sending
+- [x] Error handling and receipt processing
 
-### Rental Routes
-- [x] POST /api/rental/create
-- [x] GET /api/rental
-- [x] GET /api/rental/:address
-- [x] POST /api/rental/:address/pay-deposit
-- [x] POST /api/rental/:address/pay-rent
-- [x] POST /api/rental/:address/skip-rent
-- [x] POST /api/rental/:address/extend
+### Event Services
+- [x] Set up listeners for contract events
+- [x] Process events and update database records
+- [x] Handle error scenarios
 
-### Loan Routes
-- [x] POST /api/loan/request
-- [x] GET /api/loan/requests
-- [x] GET /api/loan/requests/:id
-- [x] POST /api/loan/offer
-- [x] GET /api/loan/offers
-- [x] POST /api/loan/offer/:id/accept
-- [x] POST /api/loan/offer/:id/withdraw
-- [x] GET /api/loan/:address
-- [x] POST /api/loan/:address/initialize
-- [x] POST /api/loan/:address/repay
+### API Endpoints Implementation
+- [ ] Complete API controllers for endpoints
 
-### User Routes
-- [x] GET /api/user/profile
-- [x] PUT /api/user/profile
-- [x] GET /api/user/dashboard
-- [x] GET /api/user/payments
+#### Authentication Routes
+- [x] POST /api/auth/register - Register a new user
+  - Requirements: Email/password validation, role verification
+- [ ] POST /api/auth/login - Login user
+  - Requirements: Credentials validation, token generation
+- [x] GET /api/auth/profile - Get user profile
+  - Requirements: Token verification, user data retrieval
+- [ ] PUT /api/auth/profile - Update user profile
+  - Requirements: Validate updates, persist changes
 
-- [x] Blockchain Interaction Services
-  - [x] Create utilities for interacting with smart contracts
-  - [x] Implement transaction signing and sending
-  - [x] Error handling and receipt processing
+#### Rental Routes
+- [ ] POST /api/rental/create - Create rental agreement
+  - Requirements: Renter email, duration, securityDeposit, baseRent, name
+- [ ] GET /api/rental - Get user's rental agreements
+  - Requirements: Filter by role (landlord/renter)
+- [ ] GET /api/rental/:address - Get rental agreement details
+  - Requirements: Contract address validation, payment history
+- [ ] POST /api/rental/:address/pay-deposit - Pay security deposit
+  - Requirements: Exact deposit amount, transaction handling
+- [ ] POST /api/rental/:address/pay-rent - Pay rent
+  - Requirements: Month, amount (base rent + any due amount)
+- [ ] POST /api/rental/:address/skip-rent - Skip rent payment
+  - Requirements: Month (must be within grace period)
+- [ ] POST /api/rental/:address/extend - Extend rental agreement
+  - Requirements: Additional months (only available in last month)
 
-- [x] Event Services
-  - [x] Set up listeners for contract events
-  - [x] Process events and update database records
-  - [x] Handle error scenarios
+#### Loan Routes
+- [ ] POST /api/loan/request - Create loan request
+  - Requirements: RentalAddress, amount (≤ available collateral), duration
+- [ ] GET /api/loan/requests - Get loan requests based on filters
+  - Requirements: Status, amount filters
+- [ ] GET /api/loan/requests/:id - Get loan request details
+  - Requirements: Request ID validation
+- [ ] POST /api/loan/offer - Create loan offer
+  - Requirements: RequestId, interestRate (1-100%), duration, graceMonths
+- [ ] GET /api/loan/offers - Get user's loan offers
+  - Requirements: Filter by role (borrower/lender)
+- [ ] POST /api/loan/offer/:id/accept - Accept loan offer
+  - Requirements: Offer ID validation, status updates
+- [ ] POST /api/loan/offer/:id/withdraw - Withdraw loan offer
+  - Requirements: Offer ID validation, status update
+- [ ] GET /api/loan/:address - Get loan agreement details
+  - Requirements: Contract address validation
+- [ ] POST /api/loan/:address/initialize - Initialize loan
+  - Requirements: Exact loan amount, transaction handling
+- [ ] POST /api/loan/:address/repay - Make loan repayment
+  - Requirements: Month, amount (with interest)
+
+#### User Routes
+- [ ] GET /api/user/dashboard - Get dashboard data
+  - Requirements: Role-specific data aggregation 
+- [ ] GET /api/user/payments - Get payment history
+  - Requirements: Filter by type, date range
 
 ## 3. Frontend Development
 - [x] UI components setup with shadcn/ui (already in place)
 - [x] Firebase authentication config (already in place)
+- [x] Application Structure with React Router (already in place)
 
-- [x] Application Structure
-  - [x] Setup React Router 
-    - [x] Define routes for all pages
-    - [x] Implement protected routes
-  
-- [x] Context Providers
-  - [x] Authentication context
-  - [x] Wallet context (for ethers.js connections)
-  - [x] Blockchain contract context
+### Context Providers
+- [x] Authentication context implementation
+  - Requirements: Login/logout state management, user role handling
+- [x] Wallet context implementation
+  - Requirements: Connect to Hardhat, handle address and balance
+- [x] Blockchain contract context implementation
+  - Requirements: Factory instances, error handling, loading states
 
-- [x] Custom Hooks
-  - [x] useAuth hook
-  - [x] useWallet hook (for connecting to Hardhat network)
-  - [x] useContract hooks (for different contracts)
-  - [x] useRentalAgreement hook
-  - [x] useLoanAgreement hook
+### Custom Hooks
+- [x] useAuth hook implementation
+  - Requirements: Authentication state, login/logout functions
+- [x] useWallet hook implementation
+  - Requirements: Wallet connection, balance retrieval
+- [x] useContract hooks implementation
+  - Requirements: Contract instance creation, method access
+- [x] useRentalAgreement hook implementation
+  - Requirements: Agreement operations, transaction handling
+- [x] useLoanAgreement hook implementation
+  - Requirements: Loan operations, payment calculations
 
-- [x] Page Components
-  - [x] Authentication
-    - [x] Login page
-    - [x] Registration page
-    - [x] User profile page
-  
-  - [x] Dashboard
-    - [x] Main dashboard view
-  
-  - [ ] Rental Features
-    - [ ] Create rental agreement page
-    - [ ] Rental agreement details page
-    - [ ] Pay security deposit component
-    - [ ] Pay rent component
-    - [ ] Skip rent component
-    - [ ] Extend agreement component
-  
-  - [ ] Loan Features
-    - [ ] Create loan request page
-    - [ ] Browse loan requests page
-    - [ ] Create loan offer component
-    - [ ] View loan offers page
-    - [ ] Loan agreement details page
-    - [ ] Pay loan repayment component
+### Page Components
+#### Authentication
+- [x] Login page
+  - Requirements: Email/password inputs, validation, error handling
+- [x] Registration page
+  - Requirements: Role selection, email validation, password requirements
+- [x] User profile page
+  - Requirements: Display user info, role, and wallet address
 
-- [x] API Services
-  - [x] Auth service
-  - [x] Rental service
-  - [x] Loan service
+#### Dashboard
+- [x] Main dashboard view
+  - Requirements: Role-specific views, summary statistics
 
-## 4. Integration and Testing
-- [ ] Integration Testing
-  - [ ] Test contract deployment
-  - [ ] Test user registration and authentication
-  - [ ] Test rental agreement creation flow
-  - [ ] Test security deposit payment
-  - [ ] Test rent payment flow
-  - [ ] Test loan request and offer flow
-  - [ ] Test loan initialization
-  - [ ] Test loan repayment flow
+#### Rental Features
+- [ ] Create rental agreement page
+  - Requirements: Form with renter email, duration, deposit, rent, name
+- [ ] Rental agreement details page
+  - Requirements: Display status, terms, payment history
+- [ ] Pay security deposit component
+  - Requirements: Display deposit amount, transaction handling
+- [ ] Pay rent component
+  - Requirements: Month selection, amount calculation
+- [ ] Skip rent component
+  - Requirements: Grace period validation, confirmation
+- [ ] Extend agreement component
+  - Requirements: Duration selection, timing validation
 
-- [ ] E2E Testing
-  - [ ] Test landlord workflow
-  - [ ] Test renter workflow
-  - [ ] Test lender workflow
+#### Loan Features
+- [ ] Create loan request page
+  - Requirements: Amount input, duration selection, collateral validation
+- [ ] Browse loan requests page
+  - Requirements: Filterable list, status indicators
+- [ ] Create loan offer component
+  - Requirements: Interest rate, duration inputs, calculation preview
+- [ ] View loan offers page
+  - Requirements: Compare offers, accept/reject functionality
+- [ ] Loan agreement details page
+  - Requirements: Terms display, repayment schedule
+- [ ] Pay loan repayment component
+  - Requirements: Amount calculation, transaction processing
 
-## 5. Developer Environment Setup
-- [ ] Create comprehensive .env.example file
-- [ ] Document setup process for new developers
-- [ ] Create scripts for easy setup and testing
+### API Services
+- [x] Auth service implementation
+  - Requirements: Register, login, profile management
+- [x] Rental service implementation
+  - Requirements: All rental-related API endpoints
+- [x] Loan service implementation
+  - Requirements: Loan request, offer, repayment endpoints
 
-## 6. Finalize Minimal MVP
-- [ ] Remove any unnecessary features
-- [ ] Optimize contract interactions
-- [ ] Implement proper error handling
-- [ ] Add minimal but sufficient UI feedback
-- [ ] Ensure all core workflows function correctly
+## 4. Testing and Integration
+- [ ] Test Basic User Flows
+  - [ ] Landlord creating rental agreement
+    - Requirements: Form submission, contract creation, database entry
+  - [ ] Renter paying security deposit
+    - Requirements: Transaction handling, status update
+  - [ ] Monthly rent payment
+    - Requirements: Calculate correct amount, payment confirmation
+  - [ ] Loan request and offer flow
+    - Requirements: Request creation, offer submission, acceptance
+  - [ ] Loan repayment
+    - Requirements: Calculate payment with interest, update status
 
-## 7. Optimizations
-- [ ] Minimize contract calls with proper batching
-- [ ] Implement caching strategy for contract data
-- [ ] Optimize database queries
-- [ ] Add transaction status tracking
-- [ ] Implement proper loading states
+## 5. Finalize Implementation
+- [ ] Add Error Handling
+  - Requirements: User-friendly error messages, fallbacks for network issues
+- [ ] Implement Loading States
+  - Requirements: Indicators for transactions, data loading
+- [ ] Add Minimal UI Feedback
+  - Requirements: Success/error notifications, confirmation dialogs
+- [ ] Optimize for Performance
+  - Requirements: Minimize contract calls, implement basic caching
 
-## 8. Developer Documentation
-- [ ] Document architecture
-- [ ] Document API endpoints
-- [ ] Document smart contract functions
-- [ ] Create workflow diagrams for main processes
+## 6. Documentation
+- [ ] Complete Setup Instructions
+  - Requirements: Clear steps for new developers
+- [ ] Document Core Workflows
+  - Requirements: Simple diagrams or descriptions for main features
 
 # Using the Project with External Hardhat Node
 
-This project has been updated to work with an externally running Hardhat node and manually deployed contracts.
+This project works with an externally running Hardhat node and manually deployed contracts.
 
 ## Prerequisites
 
@@ -192,7 +226,7 @@ This project has been updated to work with an externally running Hardhat node an
 ## Notes for Development
 
 - The deployment script only checks that the Hardhat node is running and saves the contract addresses
-- No verification of contract artifacts is performed, so contracts can be deployed from any source (e.g., Remix)
+- No verification of contract artifacts is performed, so contracts can be deployed from any source
 - All blockchain transactions will be executed on the external Hardhat node
 
-This checklist provides a structured approach to implement the blockchain-based rental loan system focusing on a minimal but fully functional implementation for local Hardhat development. The plan prioritizes core functionality while ensuring proper integration between smart contracts, backend services, and frontend components.
+This checklist provides comprehensive documentation while prioritizing a simple but functional implementation, building on the components that are already in place and focusing on the core functionality needed for the application to work with a local Hardhat node.

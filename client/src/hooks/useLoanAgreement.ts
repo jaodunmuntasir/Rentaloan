@@ -26,6 +26,8 @@ interface LoanAgreementDetails {
   collateralAmount: string;
   currentMonth: number;
   repaymentSchedule: RepaymentDetail[];
+  availableSkips: number;
+  totalSkips: number;
 }
 
 export function useLoanAgreement(contractAddress?: string) {
@@ -95,6 +97,12 @@ export function useLoanAgreement(contractAddress?: string) {
       const collateralAmount = ethers.formatEther(await contract.collateralAmount());
       const currentMonth = Number(await contract.currentMonth());
       
+      // Calculate skip values based on grace months
+      // In a real implementation, these would come from the contract
+      const totalSkips = graceMonths;
+      // For demo purposes, assume half of grace months are still available
+      const availableSkips = Math.max(0, graceMonths - Math.floor(currentMonth / 2));
+      
       // Get repayment schedule
       const repaymentSchedule: RepaymentDetail[] = [];
       for (let i = 1; i <= loanDuration; i++) {
@@ -120,7 +128,9 @@ export function useLoanAgreement(contractAddress?: string) {
         isInitialized,
         collateralAmount,
         currentMonth,
-        repaymentSchedule
+        repaymentSchedule,
+        availableSkips,
+        totalSkips
       });
     } catch (err: any) {
       setError(err.message || "Error loading loan details");
