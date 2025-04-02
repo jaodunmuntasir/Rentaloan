@@ -126,17 +126,17 @@
   - Requirements: Role-specific views, summary statistics
 
 #### Rental Features
-- [ ] Create rental agreement page
+- [x] Create rental agreement page
   - Requirements: Form with renter email, duration, deposit, rent, name
-- [ ] Rental agreement details page
+- [x] Rental agreement details page
   - Requirements: Display status, terms, payment history
-- [ ] Pay security deposit component
+- [x] Pay security deposit component
   - Requirements: Display deposit amount, transaction handling
-- [ ] Pay rent component
+- [x] Pay rent component
   - Requirements: Month selection, amount calculation
-- [ ] Skip rent component
+- [x] Skip rent component
   - Requirements: Grace period validation, confirmation
-- [ ] Extend agreement component
+- [x] Extend agreement component
   - Requirements: Duration selection, timing validation
 
 #### Loan Features

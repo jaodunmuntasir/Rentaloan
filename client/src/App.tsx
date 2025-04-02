@@ -23,6 +23,7 @@ import ProfilePage from './pages/Profile';
 import NotFound from './pages/NotFound';
 import Layout from './components/Layout';
 import { useAuth } from './contexts/AuthContext';
+import RequestDetail from './pages/loan/RequestDetail';
 
 // Inline PrivateRoute component
 const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -74,13 +75,13 @@ function App() {
                 
                 {/* Loan routes */}
                 <Route path="loan">
-                  <Route index element={<Navigate to="/loan/requests" replace />} />
+                  <Route index element={<Navigate to="/loan/request" replace />} />
                   
                   {/* Loan Requests */}
-                  <Route path="requests">
+                  <Route path="request">
                     <Route index element={<LoanRequestList />} />
+                    <Route path=":address" element={<RequestDetail />} />
                     <Route path="create" element={<LoanRequestCreate />} />
-                    <Route path=":id" element={<LoanRequestDetail />} />
                   </Route>
                   
                   {/* Loan Agreements */}
