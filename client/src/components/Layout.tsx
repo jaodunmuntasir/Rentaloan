@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 
 const Layout: React.FC = () => {
-  const { currentUser, logout } = useAuth();
+  const { logout } = useAuth();
   const { isConnected, walletAddress, walletBalance, connectWallet, disconnectWallet } = useWallet();
   const location = useLocation();
   const navigate = useNavigate();

@@ -68,33 +68,31 @@
 - [x] UI components setup with shadcn/ui (already in place)
 - [x] Firebase authentication config (already in place)
 
-- [ ] Application Structure
-  - [ ] Setup React Router 
-    - [ ] Define routes for all pages
-    - [ ] Implement protected routes
+- [x] Application Structure
+  - [x] Setup React Router 
+    - [x] Define routes for all pages
+    - [x] Implement protected routes
   
-- [ ] Context Providers
-  - [ ] Authentication context
-  - [ ] Wallet context (for ethers.js connections)
-  - [ ] Blockchain contract context
+- [x] Context Providers
+  - [x] Authentication context
+  - [x] Wallet context (for ethers.js connections)
+  - [x] Blockchain contract context
 
-- [ ] Custom Hooks
-  - [ ] useAuth hook
-  - [ ] useWallet hook (for connecting to Hardhat network)
-  - [ ] useContract hooks (for different contracts)
-  - [ ] useRentalAgreement hook
-  - [ ] useLoanAgreement hook
+- [x] Custom Hooks
+  - [x] useAuth hook
+  - [x] useWallet hook (for connecting to Hardhat network)
+  - [x] useContract hooks (for different contracts)
+  - [x] useRentalAgreement hook
+  - [x] useLoanAgreement hook
 
-- [ ] Page Components
-  - [ ] Authentication
-    - [ ] Login page
-    - [ ] Registration page
-    - [ ] User profile page
+- [x] Page Components
+  - [x] Authentication
+    - [x] Login page
+    - [x] Registration page
+    - [x] User profile page
   
-  - [ ] Dashboard
-    - [ ] Landlord dashboard
-    - [ ] Renter dashboard
-    - [ ] Lender dashboard
+  - [x] Dashboard
+    - [x] Main dashboard view
   
   - [ ] Rental Features
     - [ ] Create rental agreement page
@@ -112,10 +110,10 @@
     - [ ] Loan agreement details page
     - [ ] Pay loan repayment component
 
-- [ ] API Services
-  - [ ] Auth service
-  - [ ] Rental service
-  - [ ] Loan service
+- [x] API Services
+  - [x] Auth service
+  - [x] Rental service
+  - [x] Loan service
 
 ## 4. Integration and Testing
 - [ ] Integration Testing

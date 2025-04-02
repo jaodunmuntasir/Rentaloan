@@ -3,10 +3,10 @@ import { ethers, Contract } from 'ethers';
 import { useWallet } from './WalletContext';
 
 // Import ABIs
-import RentalAgreementFactoryABI from '../../../contracts/ABI/RentalAgreementFactory.json';
-import RentalAgreementABI from '../../../contracts/ABI/RentalAgreement.json';
-import LoanAgreementFactoryABI from '../../../contracts/ABI/LoanAgreementFactory.json';
-import LoanAgreementABI from '../../../contracts/ABI/LoanAgreement.json';
+import RentalAgreementFactoryABI from '../contracts/ABI/RentalAgreementFactory.json';
+import RentalAgreementABI from '../contracts/ABI/RentalAgreement.json';
+import LoanAgreementFactoryABI from '../contracts/ABI/LoanAgreementFactory.json';
+import LoanAgreementABI from '../contracts/ABI/LoanAgreement.json';
 
 // Contract addresses - these would typically come from environment variables or a config file
 const CONTRACT_ADDRESSES = {
