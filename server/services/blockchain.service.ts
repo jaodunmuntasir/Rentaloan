@@ -59,9 +59,14 @@ try {
 // Load contract ABIs
 const loadArtifact = (contractName: string) => {
   try {
-    const artifactPath = path.join(__dirname, `../../artifacts/contracts/${contractName}.sol/${contractName}.json`);
+    const artifactPath = path.join(__dirname, `../../contracts/ABI/${contractName}.json`);
     const artifactRaw = fs.readFileSync(artifactPath, 'utf8');
-    return JSON.parse(artifactRaw);
+    const parsedArtifact = JSON.parse(artifactRaw);
+    
+    // Return just the ABI part for ethers.js v6 compatibility
+    return { 
+      abi: parsedArtifact.abi || parsedArtifact 
+    };
   } catch (error) {
     console.error(`Error loading artifact for ${contractName}:`, error);
     throw error;

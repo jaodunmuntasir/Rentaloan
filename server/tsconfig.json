@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    // "target": "es2016",
     "module": "commonjs",
     "outDir": "./dist",
     "rootDir": "./",
@@ -12,7 +12,10 @@
     "resolveJsonModule": true,
     "paths": {
       "@models/*": ["models/*"]
-    }
+    },
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "target": "es6"
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules"]
