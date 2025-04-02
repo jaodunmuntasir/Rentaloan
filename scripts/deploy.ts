@@ -4,24 +4,34 @@ import * as path from "path";
 
 async function main() {
   // Get the contract factories
-  const RentalAgreementFactory = await ethers.getContractFactory("RentalAgreementFactory");
-  const LoanAgreementFactory = await ethers.getContractFactory("LoanAgreementFactory");
+  const RentalAgreementFactory = await ethers.getContractFactory(
+    "RentalAgreementFactory"
+  );
+  const LoanAgreementFactory = await ethers.getContractFactory(
+    "LoanAgreementFactory"
+  );
 
   // Deploy the contracts
   console.log("Deploying RentalAgreementFactory...");
   const rentalFactory = await RentalAgreementFactory.deploy();
-  await rentalFactory.deployed();
-  console.log("RentalAgreementFactory deployed to:", rentalFactory.address);
+  await rentalFactory.waitForDeployment();
+  console.log(
+    "RentalAgreementFactory deployed to:",
+    await rentalFactory.getAddress()
+  );
 
   console.log("Deploying LoanAgreementFactory...");
   const loanFactory = await LoanAgreementFactory.deploy();
-  await loanFactory.deployed();
-  console.log("LoanAgreementFactory deployed to:", loanFactory.address);
+  await loanFactory.waitForDeployment();
+  console.log(
+    "LoanAgreementFactory deployed to:",
+    await loanFactory.getAddress()
+  );
 
   // Save contract addresses to a file
   const addresses = {
-    rentalAgreementFactory: rentalFactory.address,
-    loanAgreementFactory: loanFactory.address
+    rentalAgreementFactory: await rentalFactory.getAddress(),
+    loanAgreementFactory: await loanFactory.getAddress(),
   };
 
   // Create config directory if it doesn't exist
