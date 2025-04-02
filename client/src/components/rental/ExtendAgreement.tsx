@@ -5,7 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Slider } from '../ui/slider';
-import { Toaster } from '../ui/sonner';
+import { Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 
 interface ExtendAgreementProps {
@@ -37,26 +38,20 @@ const ExtendAgreement: React.FC<ExtendAgreementProps> = ({
       const receipt = await extendRental(additionalMonths);
       
       if (receipt) {
-        Toaster({
-          title: "Rental period extended!",
-          description: `Successfully extended the rental agreement by ${additionalMonths} month${additionalMonths > 1 ? 's' : ''}.`,
-          variant: "default",
+        toast.success("Rental period extended!", {
+          description: `Successfully extended the rental agreement by ${additionalMonths} month${additionalMonths > 1 ? 's' : ''}.`
         });
         
         if (onSuccess) onSuccess();
       } else {
-        Toaster({
-          title: "Extension failed",
-          description: "There was an error extending the rental period. Please try again.",
-          variant: "destructive",
+        toast.error("Extension failed", {
+          description: "There was an error extending the rental period. Please try again."
         });
       }
     } catch (err) {
       console.error("Error extending rental period:", err);
-      Toaster({
-        title: "Extension failed",
-        description: "There was an error extending the rental period. Please try again.",
-        variant: "destructive",
+      toast.error("Extension failed", {
+        description: "There was an error extending the rental period. Please try again."
       });
     } finally {
       setIsProcessing(false);
@@ -93,73 +88,76 @@ const ExtendAgreement: React.FC<ExtendAgreementProps> = ({
   }
   
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>Extend Rental Agreement</CardTitle>
-        <CardDescription>
-          Extend the duration of your rental agreement. 
-          The current end date is {new Date(details.nextPaymentDate.getTime() + ((details.rentDuration - (details.currentRentPaid ? 1 : 0)) * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString()}.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <Label htmlFor="extension-period">Extension Period</Label>
-            <span className="text-sm text-muted-foreground">{additionalMonths} month{additionalMonths > 1 ? 's' : ''}</span>
+    <>
+      <Toaster />
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Extend Rental Agreement</CardTitle>
+          <CardDescription>
+            Extend the duration of your rental agreement. 
+            The current end date is {new Date(details.nextPaymentDate.getTime() + ((details.rentDuration - (details.currentRentPaid ? 1 : 0)) * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString()}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Label htmlFor="extension-period">Extension Period</Label>
+              <span className="text-sm text-muted-foreground">{additionalMonths} month{additionalMonths > 1 ? 's' : ''}</span>
+            </div>
+            <Slider
+              id="extension-period"
+              min={1}
+              max={12}
+              step={1}
+              value={[additionalMonths]}
+              onValueChange={(value) => setAdditionalMonths(value[0])}
+              className="py-4"
+            />
           </div>
-          <Slider
-            id="extension-period"
-            min={1}
-            max={12}
-            step={1}
-            value={[additionalMonths]}
-            onValueChange={(value) => setAdditionalMonths(value[0])}
-            className="py-4"
-          />
-        </div>
-        
-        <div className="rounded-lg bg-muted p-4">
-          <div className="flex justify-between mb-2">
-            <span className="text-sm">Current monthly rent:</span>
-            <span className="font-medium">{details.rentAmount} ETH</span>
+          
+          <div className="rounded-lg bg-muted p-4">
+            <div className="flex justify-between mb-2">
+              <span className="text-sm">Current monthly rent:</span>
+              <span className="font-medium">{details.rentAmount} ETH</span>
+            </div>
+            <div className="flex justify-between mb-2">
+              <span className="text-sm">Extension period:</span>
+              <span className="font-medium">{additionalMonths} month{additionalMonths > 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex justify-between pt-2 border-t">
+              <span className="text-sm font-medium">Total cost:</span>
+              <span className="font-bold">{calculateCost()} ETH</span>
+            </div>
           </div>
-          <div className="flex justify-between mb-2">
-            <span className="text-sm">Extension period:</span>
-            <span className="font-medium">{additionalMonths} month{additionalMonths > 1 ? 's' : ''}</span>
+          
+          <div>
+            <Label htmlFor="new-end-date">New End Date</Label>
+            <Input 
+              id="new-end-date" 
+              readOnly 
+              value={new Date(details.nextPaymentDate.getTime() + ((details.rentDuration + additionalMonths - (details.currentRentPaid ? 1 : 0)) * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString()}
+              className="bg-muted"
+            />
           </div>
-          <div className="flex justify-between pt-2 border-t">
-            <span className="text-sm font-medium">Total cost:</span>
-            <span className="font-bold">{calculateCost()} ETH</span>
-          </div>
-        </div>
-        
-        <div>
-          <Label htmlFor="new-end-date">New End Date</Label>
-          <Input 
-            id="new-end-date" 
-            readOnly 
-            value={new Date(details.nextPaymentDate.getTime() + ((details.rentDuration + additionalMonths - (details.currentRentPaid ? 1 : 0)) * 30 * 24 * 60 * 60 * 1000)).toLocaleDateString()}
-            className="bg-muted"
-          />
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button
-          className="w-full"
-          disabled={isProcessing || additionalMonths <= 0}
-          onClick={handleExtend}
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            `Extend Rental (${calculateCost()} ETH)`
-          )}
-        </Button>
-      </CardFooter>
-    </Card>
+        </CardContent>
+        <CardFooter>
+          <Button
+            className="w-full"
+            disabled={isProcessing || additionalMonths <= 0}
+            onClick={handleExtend}
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Extend Rental (${calculateCost()} ETH)`
+            )}
+          </Button>
+        </CardFooter>
+      </Card>
+    </>
   );
 };
 

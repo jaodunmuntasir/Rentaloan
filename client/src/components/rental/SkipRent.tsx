@@ -83,11 +83,11 @@ const SkipRent: React.FC<SkipRentProps> = ({
           <CardDescription>Security deposit required before managing rent</CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert variant="warning" className="bg-amber-50 border-amber-200">
+          <Alert className="bg-amber-50 border-amber-200">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-amber-600">Security Deposit Required</AlertTitle>
             <AlertDescription>
-              You need to pay the security deposit before you can manage rent payments.
+              You need to pay the security deposit before you can skip rent payments.
               Please complete the security deposit payment first.
             </AlertDescription>
           </Alert>
@@ -105,7 +105,7 @@ const SkipRent: React.FC<SkipRentProps> = ({
           <CardDescription>Rent already paid for the current period</CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert variant="success" className="bg-green-50 border-green-200">
+          <Alert className="bg-green-50 border-green-200">
             <CheckCircle2 className="h-4 w-4 text-green-600" />
             <AlertTitle className="text-green-600">Rent Already Paid</AlertTitle>
             <AlertDescription>
@@ -176,7 +176,7 @@ const SkipRent: React.FC<SkipRentProps> = ({
         </div>
         
         {!canSkipRent && (
-          <Alert variant="destructive">
+          <Alert className="bg-destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Not Available</AlertTitle>
             <AlertDescription>
@@ -188,7 +188,7 @@ const SkipRent: React.FC<SkipRentProps> = ({
         )}
         
         {canSkipRent && (
-          <Alert>
+          <Alert className="bg-primary">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Important Information</AlertTitle>
             <AlertDescription>

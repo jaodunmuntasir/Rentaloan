@@ -116,7 +116,7 @@ const PayRent: React.FC<PayRentProps> = ({
           <CardDescription>Security deposit required before paying rent</CardDescription>
         </CardHeader>
         <CardContent>
-          <Alert variant="warning" className="bg-amber-50 border-amber-200">
+          <Alert className="bg-amber-50 border-amber-200">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-amber-600">Security Deposit Required</AlertTitle>
             <AlertDescription>

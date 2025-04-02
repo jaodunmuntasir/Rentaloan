@@ -1,6 +1,8 @@
 import React from 'react';
-import { CreditCard, Banknote, Home, User } from 'lucide-react';
+import { CreditCard, Banknote, Home, User, LayoutDashboard, Building, Coins } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { cn } from '../lib/utils';
+import { Badge } from './ui/badge';
 
 interface NavigationItem {
   title: string;
@@ -10,6 +12,7 @@ interface NavigationItem {
     title: string;
     href: string;
     description: string;
+    badge?: string;
   }[];
 }
 
@@ -18,17 +21,17 @@ export const navigationItems: NavigationItem[] = [
   {
     title: 'Dashboard',
     href: '/dashboard',
-    icon: <Home className="h-4 w-4" />,
+    icon: <LayoutDashboard className="h-4 w-4" />,
   },
   {
     title: 'Rentals',
     href: '/rental',
-    icon: <Banknote className="h-4 w-4" />,
+    icon: <Building className="h-4 w-4" />,
   },
   {
     title: 'Loans',
     href: '/loan',
-    icon: <CreditCard className="h-4 w-4" />,
+    icon: <Coins className="h-4 w-4" />,
     submenu: [
       {
         title: 'My Agreements',
@@ -38,7 +41,8 @@ export const navigationItems: NavigationItem[] = [
       {
         title: 'Browse Requests',
         href: '/loan/requests',
-        description: 'Find loan opportunities'
+        description: 'Find loan opportunities',
+        badge: 'New'
       },
       {
         title: 'Request Loan',
@@ -72,7 +76,10 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
   };
   
   return (
-    <nav className={className}>
+    <nav className={cn("flex flex-col gap-2", className)}>
+      <div className="text-xs font-semibold text-muted-foreground px-2">
+        MAIN
+      </div>
       <ul className="space-y-1">
         {navigationItems.map((item) => {
           const active = isActive(item.href);
@@ -81,20 +88,21 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
             <li key={item.href}>
               <Link 
                 to={item.href} 
-                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md 
-                  ${active 
-                    ? 'bg-blue-50 text-blue-700' 
-                    : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                  active
+                    ? "bg-primary/10 text-primary hover:bg-primary/15" 
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
               >
-                <span className={active ? 'text-blue-500' : 'text-gray-500'}>
+                <span>
                   {item.icon}
                 </span>
                 {item.title}
               </Link>
               
-              {item.submenu && (
-                <ul className="pl-8 mt-1 space-y-1">
+              {item.submenu && active && (
+                <ul className="pl-7 mt-1 space-y-1 border-l border-muted ml-1.5">
                   {item.submenu.map((subItem) => {
                     const subActive = isSubItemActive(subItem.href);
                     
@@ -102,13 +110,19 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
                       <li key={subItem.href}>
                         <Link
                           to={subItem.href}
-                          className={`flex items-center gap-2 px-3 py-1.5 text-sm rounded-md
-                            ${subActive 
-                              ? 'bg-blue-50 text-blue-700' 
-                              : 'text-gray-600 hover:bg-gray-100'
-                            }`}
+                          className={cn(
+                            "flex items-center justify-between py-1.5 px-3 text-sm rounded-md transition-colors",
+                            subActive
+                              ? "bg-primary/10 text-primary font-medium hover:bg-primary/15" 
+                              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
                         >
-                          {subItem.title}
+                          <span>{subItem.title}</span>
+                          {subItem.badge && (
+                            <Badge variant="secondary" className="ml-auto text-xs">
+                              {subItem.badge}
+                            </Badge>
+                          )}
                         </Link>
                       </li>
                     );
@@ -118,6 +132,23 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
             </li>
           );
         })}
+      </ul>
+      
+      <div className="mt-6 text-xs font-semibold text-muted-foreground px-2">
+        RESOURCES
+      </div>
+      <ul className="space-y-1">
+        <li>
+          <Link 
+            to="/help" 
+            className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <span>
+              <CreditCard className="h-4 w-4" />
+            </span>
+            Help & Documentation
+          </Link>
+        </li>
       </ul>
     </nav>
   );
