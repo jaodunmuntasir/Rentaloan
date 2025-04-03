@@ -6,20 +6,20 @@ import { UserApi } from '../services/api.service';
 interface ProfileData {
   id: string;
   email: string;
-  displayName: string;
+  name: string;
   walletAddress: string | null;
   createdAt: string;
 }
 
 const ProfilePage: React.FC = () => {
   const { currentUser, updateUserProfile } = useAuth();
-  const { walletAddress, isConnected, connectWallet } = useWallet();
+  const { walletAddress, isConnected, connectWallet, walletBalance } = useWallet();
   
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [displayName, setDisplayName] = useState('');
+  const [name, setName] = useState('');
   const [updateLoading, setUpdateLoading] = useState(false);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   
@@ -31,7 +31,7 @@ const ProfilePage: React.FC = () => {
         const data = await UserApi.getProfile(currentUser);
         if (data) {
           setProfile(data as ProfileData);
-          setDisplayName(data.displayName || '');
+          setName(data.name || '');
         }
         setError(null);
       } catch (err: any) {
@@ -57,14 +57,14 @@ const ProfilePage: React.FC = () => {
       setUpdateLoading(true);
       
       // Update Firebase profile
-      await updateUserProfile({ displayName });
+      await updateUserProfile({ displayName: name });
       
       // Update backend profile
-      await UserApi.updateProfile(currentUser, { displayName });
+      await UserApi.updateProfile(currentUser, { name });
       
       // Update local state
       if (profile) {
-        setProfile({ ...profile, displayName });
+        setProfile({ ...profile, name });
       }
       
       setIsEditing(false);
@@ -155,14 +155,14 @@ const ProfilePage: React.FC = () => {
           <form onSubmit={handleProfileUpdate} className="p-6">
             <div className="space-y-4">
               <div>
-                <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
-                  Display Name
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Name
                 </label>
                 <input
                   type="text"
-                  id="displayName"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                   placeholder="Enter your name"
                   required
@@ -212,8 +212,8 @@ const ProfilePage: React.FC = () => {
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <h3 className="text-sm font-medium text-gray-500">Display Name</h3>
-                <p className="mt-1 text-sm text-gray-900">{profile?.displayName || 'Not set'}</p>
+                <h3 className="text-sm font-medium text-gray-500">Name</h3>
+                <p className="mt-1 text-sm text-gray-900">{profile?.name || 'Not set'}</p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Email Address</h3>
@@ -258,6 +258,15 @@ const ProfilePage: React.FC = () => {
               <p className="mt-1 text-sm text-red-500">No wallet connected</p>
             )}
           </div>
+          
+          {isConnected && (
+            <div className="mb-4">
+              <h3 className="text-sm font-medium text-gray-500">Wallet Balance</h3>
+              <p className="mt-1 text-sm text-gray-900">
+                {walletBalance ? `${walletBalance} ETH` : 'Loading balance...'}
+              </p>
+            </div>
+          )}
           
           {!isConnected && (
             <button

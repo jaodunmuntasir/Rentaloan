@@ -14,7 +14,7 @@ interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, displayName: string) => Promise<void>;
+  signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUserProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
 }
@@ -40,12 +40,9 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const [loading, setLoading] = useState(true);
 
   // Sign up function
-  const signup = async (email: string, password: string, displayName: string) => {
+  const signup = async (email: string, password: string) => {
     // Create user in Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    
-    // Update profile with display name
-    await updateProfile(userCredential.user, { displayName });
     
     // Register user in our backend
     await registerUserInBackend(userCredential.user);

@@ -12,7 +12,6 @@ const Register: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
@@ -22,7 +21,7 @@ const Register: React.FC = () => {
     e.preventDefault();
     
     // Basic validation
-    if (!email || !password || !confirmPassword || !displayName) {
+    if (!email || !password || !confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -40,7 +39,7 @@ const Register: React.FC = () => {
     try {
       setError('');
       setLoading(true);
-      await signup(email, password, displayName);
+      await signup(email, password);
       navigate('/dashboard');
     } catch (err: any) {
       setError('Failed to create an account: ' + (err.message || 'Unknown error'));
@@ -69,20 +68,6 @@ const Register: React.FC = () => {
               </Alert>
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  placeholder="Enter your name"
-                  type="text"
-                  autoCapitalize="none"
-                  autoComplete="name"
-                  autoCorrect="off"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

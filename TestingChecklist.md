@@ -4,22 +4,22 @@ This document provides a systematic checklist for manually testing all features 
 
 ## Authentication
 
-- [ ] **Registration**
+- [x] **Registration**
   - [x] User can register with email, password, and wallet address (wallet address automatically assigned)
   - [x] Registration fails with invalid email format
   - [ ] Registration fails with password too short
   - [x] User receives appropriate error messages
 
-- [ ] **Login**
+- [x] **Login**
   - [x] User can log in with correct credentials
   - [x] Login fails with incorrect credentials
   - [x] User receives appropriate error messages
   - [x] User is redirected to dashboard after successful login
 
-- [ ] **Profile Management**
-  - [ ] User can view their profile information
-  - [ ] User can update their profile information
-  - [ ] Changes are persisted after logout/login
+- [x] **Profile Management**
+  - [x] User can view their profile information
+  - [x] User can update their profile information
+  - [x] Changes are persisted after logout/login
 
 ## Landlord Perspective
 

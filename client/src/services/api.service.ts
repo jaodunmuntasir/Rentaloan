@@ -66,16 +66,15 @@ export const UserApi = {
     return apiCall<{
       id: string;
       email: string;
-      displayName: string;
+      name: string;
       walletAddress: string | null;
-      role: string;
       createdAt: string;
     }>('/api/user/profile', 'GET', user);
   },
   
   // Update user profile
   async updateProfile(user: User | null, data: {
-    displayName?: string;
+    name?: string;
     walletAddress?: string;
   }) {
     return apiCall('/api/user/profile', 'PUT', user, data);
