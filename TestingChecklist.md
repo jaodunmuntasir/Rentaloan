@@ -6,16 +6,16 @@ This document provides a systematic checklist for manually testing all features 
 
 - [ ] **Registration**
   - [ ] User can register with email, password, and wallet address
-  - [ ] Registration fails with invalid email format
+  - [x] Registration fails with invalid email format
   - [ ] Registration fails with password too short
   - [ ] Registration fails with invalid wallet address
-  - [ ] User receives appropriate error messages
+  - [x] User receives appropriate error messages
 
 - [ ] **Login**
-  - [ ] User can log in with correct credentials
-  - [ ] Login fails with incorrect credentials
-  - [ ] User receives appropriate error messages
-  - [ ] User is redirected to dashboard after successful login
+  - [x] User can log in with correct credentials
+  - [x] Login fails with incorrect credentials
+  - [x] User receives appropriate error messages
+  - [x] User is redirected to dashboard after successful login
 
 - [ ] **Profile Management**
   - [ ] User can view their profile information

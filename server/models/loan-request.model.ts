@@ -5,6 +5,7 @@ import { RentalAgreement } from './rental-agreement.model';
 export enum LoanRequestStatus {
   OPEN = 'OPEN',
   MATCHED = 'MATCHED',
+  FULFILLED = 'FULFILLED',
   CLOSED = 'CLOSED',
   CANCELLED = 'CANCELLED'
 }

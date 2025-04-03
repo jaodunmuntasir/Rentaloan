@@ -25,7 +25,6 @@ router.get('/profile', authenticate, async (req: Request, res: Response) => {
       id: user.id,
       email: user.email,
       name: user.get('name') || '',
-      role: user.role,
       walletAddress: user.walletAddress,
       createdAt: user.createdAt
     });
@@ -64,7 +63,6 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         name: user.get('name') || '',
-        role: user.role,
         walletAddress: user.walletAddress,
         createdAt: user.createdAt
       }
@@ -90,122 +88,121 @@ router.get('/dashboard', authenticate, async (req: Request, res: Response) => {
     
     let rentalAgreements: any[] = [];
     let loanAgreements: any[] = [];
+    let loanRequests: any[] = [];
+    let loanOffers: any[] = [];
     let payments: any[] = [];
     
-    // Get different data based on user role
-    if (user.role === 'landlord') {
-      // Get rental agreements where user is landlord
-      rentalAgreements = await RentalAgreement.findAll({
-        where: { landlordId: user.id },
-        include: [
-          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
-        ],
-        order: [['createdDate', 'DESC']]
-      });
-      
-      // Get payments received
-      payments = await Payment.findAll({
-        where: { recipientId: user.id },
-        include: [
-          { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
-          { model: RentalAgreement, required: false },
-          { model: LoanAgreement, required: false }
-        ],
-        order: [['paymentDate', 'DESC']],
-        limit: 20
-      });
-    } else if (user.role === 'renter') {
-      // Get rental agreements where user is renter
-      rentalAgreements = await RentalAgreement.findAll({
-        where: { renterId: user.id },
-        include: [
-          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] }
-        ],
-        order: [['createdDate', 'DESC']]
-      });
-      
-      // Get loan requests made by user
-      const loanRequests = await LoanRequest.findAll({
-        where: { requesterId: user.id },
-        include: [
-          { model: RentalAgreement }
-        ],
-        order: [['createdAt', 'DESC']]
-      });
-      
-      // Get loan agreements where user is borrower
-      loanAgreements = await LoanAgreement.findAll({
-        where: { borrowerId: user.id },
-        include: [
-          { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] }
-        ],
-        order: [['createdDate', 'DESC']]
-      });
-      
-      // Get payments made
-      payments = await Payment.findAll({
-        where: { payerId: user.id },
-        include: [
-          { model: User, as: 'recipient', attributes: ['id', 'email', 'walletAddress'] },
-          { model: RentalAgreement, required: false },
-          { model: LoanAgreement, required: false }
-        ],
-        order: [['paymentDate', 'DESC']],
-        limit: 20
-      });
-    } else if (user.role === 'lender') {
-      // Get loan offers made by user
-      const loanOffers = await LoanOffer.findAll({
-        where: { lenderId: user.id },
-        include: [
-          { 
-            model: LoanRequest,
-            include: [
-              { model: RentalAgreement },
-              { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
-            ]
-          }
-        ],
-        order: [['createdAt', 'DESC']]
-      });
-      
-      // Get loan agreements where user is lender
-      loanAgreements = await LoanAgreement.findAll({
-        where: { lenderId: user.id },
-        include: [
-          { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] }
-        ],
-        order: [['createdDate', 'DESC']]
-      });
-      
-      // Get loan payments received
-      payments = await Payment.findAll({
-        where: { recipientId: user.id, loanAgreementId: { [Op.ne]: null } },
-        include: [
-          { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
-          { model: LoanAgreement }
-        ],
-        order: [['paymentDate', 'DESC']],
-        limit: 20
-      });
-    }
+    // Get rental agreements where user is either landlord or renter
+    const allRentalAgreements = await RentalAgreement.findAll({
+      where: {
+        [Op.or]: [
+          { landlordId: user.id },
+          { renterId: user.id }
+        ]
+      },
+      include: [
+        { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+      ],
+      order: [['createdDate', 'DESC']]
+    });
+    
+    // Add user's role for each agreement
+    rentalAgreements = allRentalAgreements.map(agreement => {
+      const agreementJson = agreement.toJSON();
+      agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
+      return agreementJson;
+    });
+    
+    // Get loan agreements where user is either lender or borrower
+    const allLoanAgreements = await LoanAgreement.findAll({
+      where: {
+        [Op.or]: [
+          { lenderId: user.id },
+          { borrowerId: user.id }
+        ]
+      },
+      include: [
+        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] }
+      ],
+      order: [['createdDate', 'DESC']]
+    });
+    
+    // Add user's role for each loan agreement
+    loanAgreements = allLoanAgreements.map(agreement => {
+      const agreementJson = agreement.toJSON();
+      agreementJson.userRole = agreement.lenderId === user.id ? 'lender' : 'borrower';
+      return agreementJson;
+    });
+    
+    // Get loan requests made by this user
+    loanRequests = await LoanRequest.findAll({
+      where: { requesterId: user.id },
+      include: [
+        { model: RentalAgreement },
+        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Get loan offers made by this user
+    loanOffers = await LoanOffer.findAll({
+      where: { lenderId: user.id },
+      include: [
+        { 
+          model: LoanRequest,
+          include: [
+            { model: RentalAgreement },
+            { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+          ]
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Get payments related to the user (both sent and received)
+    payments = await Payment.findAll({
+      where: {
+        [Op.or]: [
+          { payerId: user.id },
+          { recipientId: user.id }
+        ]
+      },
+      include: [
+        { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'recipient', attributes: ['id', 'email', 'walletAddress'] },
+        { model: RentalAgreement, required: false },
+        { model: LoanAgreement, required: false }
+      ],
+      order: [['paymentDate', 'DESC']],
+      limit: 20
+    });
+    
+    // Add user's role for each payment
+    payments = payments.map(payment => {
+      const paymentJson = payment.toJSON();
+      paymentJson.userRole = payment.payerId === user.id ? 'payer' : 'recipient';
+      return paymentJson;
+    });
     
     res.json({
       user: {
         id: user.id,
         email: user.email,
         name: user.get('name') || '',
-        role: user.role,
         walletAddress: user.walletAddress
       },
       rentalAgreements,
       loanAgreements,
-      payments
+      loanRequests,
+      loanOffers,
+      recentPayments: payments
     });
   } catch (error) {
-    console.error('Error fetching dashboard data:', error);
+    console.error('Error retrieving dashboard data:', error);
     res.status(500).json({
-      message: 'Failed to fetch dashboard data',
+      message: 'Failed to retrieve dashboard data',
       error: (error as Error).message
     });
   }

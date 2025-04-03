@@ -8,7 +8,6 @@ interface ProfileData {
   email: string;
   displayName: string;
   walletAddress: string | null;
-  role: string;
   createdAt: string;
 }
 
@@ -208,10 +207,6 @@ const ProfilePage: React.FC = () => {
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Email Address</h3>
                 <p className="mt-1 text-sm text-gray-900">{profile?.email}</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">User Role</h3>
-                <p className="mt-1 text-sm text-gray-900">{profile?.role || 'User'}</p>
               </div>
               <div>
                 <h3 className="text-sm font-medium text-gray-500">Account Created</h3>

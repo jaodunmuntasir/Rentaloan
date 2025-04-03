@@ -481,16 +481,68 @@ export const getRepaymentSchedule = async (contractAddress: string) => {
   }
 };
 
-// Get Available Collateral
+// Get available collateral in a rental agreement
 export const getAvailableCollateral = async (rentalContractAddress: string) => {
   try {
     const rentalContract = await getRentalAgreementContract(rentalContractAddress);
-    
     // @ts-ignore - Contract method exists at runtime
-    const collateral = await rentalContract.getAvailableCollateral();
-    return ethers.formatEther(collateral);
+    const details = await rentalContract.getContractDetails();
+    
+    // Security deposit is at index 4 in the returned array
+    const securityDeposit = ethers.formatEther(details[4]);
+    
+    return securityDeposit;
   } catch (error) {
     console.error('Error getting available collateral:', error);
+    throw error;
+  }
+};
+
+// Create a loan against a rental agreement's collateral
+export const createLoan = async (
+  rentalContractAddress: string,
+  lenderWallet: string,
+  amount: number,
+  interestRate: number,
+  duration: number
+) => {
+  try {
+    const signer = await provider.getSigner(lenderWallet);
+    const connectedContract = loanFactoryContract.connect(signer);
+    
+    // Call the createLoanAgreement function on the loan factory
+    // @ts-ignore - Contract method exists at runtime
+    const tx = await connectedContract.createLoanAgreement(
+      '',  // Borrower will be determined by the rental contract
+      rentalContractAddress,
+      ethers.parseEther(amount.toString()),
+      interestRate,
+      duration,
+      0  // No grace months for now
+    );
+    
+    const receipt = await tx.wait();
+    
+    // Get contract address from event logs
+    const eventLogs = receipt.logs
+      .filter((log: any) => log.topics[0] === ethers.id('LoanAgreementCreated(address,address,address,uint256)'))
+      .map((log: any) => {
+        const parsedLog = loanFactoryContract.interface.parseLog({
+          topics: log.topics,
+          data: log.data
+        });
+        return parsedLog?.args;
+      });
+    
+    if (!eventLogs || eventLogs.length === 0 || !eventLogs[0]) {
+      throw new Error('Failed to parse event logs from transaction receipt');
+    }
+    
+    const event = eventLogs[0];
+    
+    return event[0]; // Return the created loan agreement contract address
+  } catch (error) {
+    console.error('Error creating loan:', error);
     throw error;
   }
 };
@@ -512,5 +564,6 @@ export default {
   makeRepayment,
   getLoanAgreementDetails,
   getRepaymentSchedule,
-  getAvailableCollateral
+  getAvailableCollateral,
+  createLoan
 }; 

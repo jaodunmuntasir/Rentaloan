@@ -18,6 +18,7 @@ const getAvailableWallet = async (): Promise<string> => {
       usedAddresses.map((u) => u.walletAddress.toLowerCase())
     );
 
+    // Find the first available account that isn't already assigned
     const availableAccount = accounts.find(
       (account) => !usedAddressSet.has(account.address.toLowerCase())
     )?.address;
@@ -26,6 +27,7 @@ const getAvailableWallet = async (): Promise<string> => {
       throw new Error("No available wallet addresses");
     }
 
+    console.log(`Assigning wallet address: ${availableAccount}`);
     return availableAccount;
   } catch (error) {
     console.error("Error getting available wallet:", error);
@@ -33,25 +35,67 @@ const getAvailableWallet = async (): Promise<string> => {
   }
 };
 
-// Register route
+// Register route - handles both token-based and direct registration
 const registerUser: RequestHandler = async (req, res): Promise<void> => {
   try {
-    const { email, password, role } = req.body;
-    if (!email || !password || !role) {
-      res.status(400).json({ message: "Email, password, and role are required" });
+    // Get user info either from auth token or from request body
+    let firebaseId, email, displayName;
+    
+    if (req.headers.authorization?.startsWith('Bearer ')) {
+      // Token-based registration (from frontend)
+      const token = req.headers.authorization.split('Bearer ')[1];
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      
+      firebaseId = decodedToken.uid;
+      
+      // Get user details from Firebase
+      const userRecord = await admin.auth().getUser(firebaseId);
+      email = userRecord.email;
+      displayName = userRecord.displayName;
+      
+      console.log(`Registering user with Firebase ID: ${firebaseId}, Email: ${email}`);
+    } else {
+      // Direct registration (e.g., admin creating users)
+      const { email: reqEmail, password } = req.body;
+      
+      if (!reqEmail || !password) {
+        res.status(400).json({ message: "Email and password are required" });
+        return;
+      }
+      
+      email = reqEmail;
+      
+      // Create user in Firebase
+      const userRecord = await admin.auth().createUser({ email, password });
+      firebaseId = userRecord.uid;
+      
+      console.log(`Created new user with Firebase ID: ${firebaseId}, Email: ${email}`);
+    }
+    
+    // Check if user already exists in our database
+    const existingUser = await User.findOne({ where: { firebaseId } });
+    if (existingUser) {
+      res.status(409).json({ message: "User already registered" });
       return;
     }
-    if (!["landlord", "renter", "lender"].includes(role)) {
-      res.status(400).json({ message: "Invalid role. Must be landlord, renter, or lender" });
-      return;
-    }
-    const userRecord = await admin.auth().createUser({ email, password });
+    
+    // Get an available wallet address
     const walletAddress = await getAvailableWallet();
-    const user = await User.create({ firebaseId: userRecord.uid, email, role, walletAddress });
+    
+    // Create user in our database
+    const user = await User.create({ 
+      firebaseId, 
+      email, 
+      walletAddress
+    });
 
     res.status(201).json({
       message: "User registered successfully",
-      user: { id: user.id, email: user.email, role: user.role, walletAddress: user.walletAddress },
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        walletAddress: user.walletAddress 
+      },
     });
   } catch (error) {
     console.error("Registration error:", error);
@@ -77,7 +121,6 @@ const getUserProfile: RequestHandler = async (req, res): Promise<void> => {
     res.json({
       id: user.id,
       email: user.email,
-      role: user.role,
       walletAddress: user.walletAddress,
     });
   } catch (error) {
@@ -129,7 +172,6 @@ const updateUserProfile: RequestHandler = async (req, res): Promise<void> => {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role,
         walletAddress: user.walletAddress,
       },
     });

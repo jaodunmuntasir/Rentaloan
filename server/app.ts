@@ -38,9 +38,9 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 const PORT = process.env.PORT || 3000;
 
 // Initialize database and start server
-sequelize.sync()
+sequelize.sync({ alter: true })
   .then(() => {
-    console.log('Database synchronized');
+    console.log('Database synchronized and updated if needed');
     // Initialize the event service after database is synchronized
     eventService.initEventService();
     

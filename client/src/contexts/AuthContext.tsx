@@ -55,7 +55,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   const registerUserInBackend = async (user: User) => {
     try {
       const idToken = await user.getIdToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/auth/register`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -68,11 +69,13 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to register user in backend');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to register user in backend');
       }
     } catch (error) {
       console.error('Error registering user in backend:', error);
       // We might want to delete the Firebase user here if backend registration fails
+      throw error; // Re-throw to handle in the UI
     }
   };
 

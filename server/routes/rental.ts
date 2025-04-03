@@ -5,40 +5,14 @@ import { RentalAgreement, RentalAgreementStatus } from '../models/rental-agreeme
 import { Payment } from '../models/payment.model';
 import { PaymentType } from '../models/payment.model';
 import blockchainService from '../services/blockchain.service';
+import sequelize from '../models';
+import { Op } from 'sequelize';
 
 const router = express.Router();
 
-// Middleware to check if user is landlord
-const isLandlord = async (req: Request, res: Response, next: express.NextFunction) => {
-  try {
-    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
-    if (!user || user.role !== 'landlord') {
-      return res.status(403).json({ message: 'Only landlords can perform this action' });
-    }
-    next();
-  } catch (error) {
-    console.error('Error checking role:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
-// Middleware to check if user is renter
-const isRenter = async (req: Request, res: Response, next: express.NextFunction) => {
-  try {
-    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
-    if (!user || user.role !== 'renter') {
-      return res.status(403).json({ message: 'Only renters can perform this action' });
-    }
-    next();
-  } catch (error) {
-    console.error('Error checking role:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-};
-
 // Create rental agreement
 // @ts-ignore
-router.post('/create', authenticate, isLandlord, async (req: Request, res: Response) => {
+router.post('/create', authenticate, async (req: Request, res: Response) => {
   try {
     const { renterEmail, duration, securityDeposit, baseRent, name } = req.body;
     
@@ -46,16 +20,16 @@ router.post('/create', authenticate, isLandlord, async (req: Request, res: Respo
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
-    // Find the landlord
+    // Find the landlord (the user creating the agreement)
     const landlord = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!landlord) {
-      return res.status(404).json({ message: 'Landlord not found' });
+      return res.status(404).json({ message: 'User not found' });
     }
     
     // Find the renter by email
-    const renter = await User.findOne({ where: { email: renterEmail, role: 'renter' } });
+    const renter = await User.findOne({ where: { email: renterEmail } });
     if (!renter) {
-      return res.status(404).json({ message: 'Renter not found or not registered as a renter' });
+      return res.status(404).json({ message: 'Renter not found' });
     }
     
     // Calculate grace period (securityDeposit / baseRent)
@@ -113,28 +87,28 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'User not found' });
     }
     
-    let agreements;
-    if (user.role === 'landlord') {
-      agreements = await RentalAgreement.findAll({
-        where: { landlordId: user.id },
-        include: [
-          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+    // Get agreements where the user is either the landlord or the renter
+    const agreements = await RentalAgreement.findAll({
+      where: {
+        [Op.or]: [
+          { landlordId: user.id },
+          { renterId: user.id }
         ]
-      });
-    } else if (user.role === 'renter') {
-      agreements = await RentalAgreement.findAll({
-        where: { renterId: user.id },
-        include: [
-          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
-        ]
-      });
-    } else {
-      return res.status(403).json({ message: 'Only landlords and renters can view rental agreements' });
-    }
+      },
+      include: [
+        { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+        { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+      ]
+    });
     
-    res.json({ agreements });
+    // Add a userRole field to each agreement to indicate the user's role in this specific agreement
+    const agreementsWithRole = agreements.map(agreement => {
+      const agreementJson = agreement.toJSON();
+      agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
+      return agreementJson;
+    });
+    
+    res.json({ agreements: agreementsWithRole });
   } catch (error) {
     console.error('Error retrieving rental agreements:', error);
     res.status(500).json({
@@ -186,9 +160,13 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
       order: [['paymentDate', 'DESC']]
     });
     
+    // Add user's role in this specific agreement
+    const agreementJson = agreement.toJSON();
+    agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
+    
     res.json({
       agreement: {
-        ...agreement.toJSON(),
+        ...agreementJson,
         onChain: onChainDetails
       },
       payments
@@ -204,7 +182,7 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
 
 // Pay security deposit
 // @ts-ignore
-router.post('/:address/pay-deposit', authenticate, isRenter, async (req: Request, res: Response) => {
+router.post('/:address/pay-deposit', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
     
@@ -278,7 +256,7 @@ router.post('/:address/pay-deposit', authenticate, isRenter, async (req: Request
 
 // Pay rent
 // @ts-ignore
-router.post('/:address/pay-rent', authenticate, isRenter, async (req: Request, res: Response) => {
+router.post('/:address/pay-rent', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
     const { month } = req.body;
@@ -362,7 +340,7 @@ router.post('/:address/pay-rent', authenticate, isRenter, async (req: Request, r
 
 // Skip rent
 // @ts-ignore
-router.post('/:address/skip-rent', authenticate, isRenter, async (req: Request, res: Response) => {
+router.post('/:address/skip-rent', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
     const { month } = req.body;

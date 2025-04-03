@@ -22,7 +22,6 @@ import {
 } from 'lucide-react';
 
 interface DashboardData {
-  role: string;
   rentalAgreements: any[];
   loanAgreements: any[];
   loanRequests: any[];
@@ -174,13 +173,6 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-[120px_1fr] items-center">
               <span className="font-medium text-muted-foreground">Email:</span>
               <span>{currentUser?.email}</span>
-            </div>
-            <Separator />
-            <div className="grid grid-cols-[120px_1fr] items-center">
-              <span className="font-medium text-muted-foreground">Role:</span>
-              <Badge variant="outline" className="w-fit">
-                {dashboardData?.role || 'User'}
-              </Badge>
             </div>
           </CardContent>
         </Card>

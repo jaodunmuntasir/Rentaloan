@@ -4,7 +4,9 @@ import { LoanRequest } from './loan-request.model';
 
 export enum LoanAgreementStatus {
   CREATED = 'CREATED',
+  PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
+  FAILED = 'FAILED',
   CLOSED = 'CLOSED'
 }
 

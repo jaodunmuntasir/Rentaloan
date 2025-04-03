@@ -41,6 +41,12 @@ export class LoanOffer extends Model {
   interestRate!: number;
 
   @Column({
+    type: DataType.DATE,
+    allowNull: false
+  })
+  expirationDate!: Date;
+
+  @Column({
     type: DataType.INTEGER,
     allowNull: false
   })
