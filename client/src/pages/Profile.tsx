@@ -84,19 +84,30 @@ const ProfilePage: React.FC = () => {
   
   // Handle wallet connection
   const handleConnectWallet = async () => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.log("Cannot connect wallet: User not logged in");
+      return;
+    }
     
     try {
+      console.log("Attempting to connect wallet...");
       const success = await connectWallet();
+      console.log("Connect wallet result:", success);
       
-      if (success && profile) {
-        // Profile will be updated via the wallet connection process
-        // which calls updateWalletAddress in the backend
-        setProfile({ ...profile, walletAddress: walletAddress });
+      if (success) {
+        console.log("Wallet connected successfully, refreshing profile data");
+        // Refresh profile data to get updated wallet address
+        const data = await UserApi.getProfile(currentUser);
+        if (data) {
+          setProfile(data as ProfileData);
+          console.log("Profile updated with wallet:", data.walletAddress);
+        }
+      } else {
+        setError("Failed to connect wallet. Please try again.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error connecting wallet:', err);
-      setError('Failed to connect wallet. Please try again.');
+      setError(`Failed to connect wallet: ${err.message}`);
     }
   };
 
@@ -253,14 +264,14 @@ const ProfilePage: React.FC = () => {
               onClick={handleConnectWallet}
               className="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
-              Connect Wallet
+              Connect Wallet Manually
             </button>
           )}
           
           <div className="mt-4">
             <p className="text-sm text-gray-500">
               Your wallet is used for all blockchain transactions including creating rental agreements, 
-              paying rent, and interacting with loans.
+              paying rent, and interacting with loans. Your wallet connects automatically when you log in.
             </p>
           </div>
         </div>

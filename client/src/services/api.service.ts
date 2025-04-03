@@ -33,7 +33,6 @@ async function apiCall<T>(
     const config: RequestInit = {
       method,
       headers,
-      credentials: 'include',
     };
     
     if (data && (method === 'POST' || method === 'PUT')) {

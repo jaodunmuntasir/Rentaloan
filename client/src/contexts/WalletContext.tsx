@@ -47,36 +47,115 @@ export const WalletProvider: React.FC<{children: React.ReactNode}> = ({ children
     initProvider();
   }, []);
 
+  // Auto-connect/disconnect wallet when user logs in/out
+  useEffect(() => {
+    const handleUserChange = async () => {
+      if (currentUser && provider) {
+        // User logged in - connect wallet
+        console.log("User logged in, auto-connecting wallet...");
+        await connectWallet();
+      } else if (!currentUser) {
+        // User logged out - disconnect wallet
+        console.log("User logged out, disconnecting wallet...");
+        disconnectWallet();
+      }
+    };
+
+    handleUserChange();
+  }, [currentUser, provider]); // Re-run when user or provider changes
+
   // Connect to wallet
   const connectWallet = async (): Promise<boolean> => {
-    if (!provider || !currentUser) return false;
+    if (!provider || !currentUser) {
+      console.log("Cannot connect: provider or currentUser is null");
+      return false;
+    }
 
     try {
-      // For development, just use the first account from Hardhat
-      const accounts = await provider.listAccounts();
-      if (accounts.length === 0) {
-        console.error('No accounts available in the Hardhat node');
+      console.log("Connecting wallet...");
+      
+      // Get user's profile to get their wallet address
+      const idToken = await currentUser.getIdToken();
+      console.log("Got token, fetching profile...");
+      
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/user/profile`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+      
+      if (!response.ok) {
+        console.error("Profile fetch failed:", response.status, response.statusText);
+        throw new Error(`Failed to get user profile: ${response.status}`);
+      }
+      
+      const profileData = await response.json();
+      console.log("Got profile data:", profileData);
+      
+      const userWalletAddress = profileData.walletAddress;
+      if (!userWalletAddress) {
+        console.error('User has no wallet address assigned');
         return false;
       }
-
-      // Use first account for dev purposes
-      const connectedSigner = await provider.getSigner(accounts[0].address);
-      setSigner(connectedSigner);
       
-      // Get address and update state
-      const address = await connectedSigner.getAddress();
-      setWalletAddress(address);
+      console.log("Using wallet address:", userWalletAddress);
       
-      // Get balance
-      const balance = await provider.getBalance(address);
-      setWalletBalance(ethers.formatEther(balance));
-      
-      setIsConnected(true);
-      
-      // Update user's wallet address in the backend
-      await updateWalletAddress(address);
-      
-      return true;
+      // Connect to the user's assigned wallet
+      try {
+        const accounts = await provider.listAccounts();
+        console.log("Available accounts:", accounts.map(a => a.address));
+        
+        const connectedSigner = await provider.getSigner(userWalletAddress);
+        console.log("Got signer");
+        
+        setSigner(connectedSigner);
+        
+        // Get address and update state
+        const address = await connectedSigner.getAddress();
+        console.log("Connected to address:", address);
+        
+        setWalletAddress(address);
+        
+        // Get balance
+        const balance = await provider.getBalance(address);
+        setWalletBalance(ethers.formatEther(balance));
+        console.log("Wallet balance:", ethers.formatEther(balance));
+        
+        setIsConnected(true);
+        console.log("Wallet connected successfully");
+        return true;
+      } catch (signerError) {
+        console.error("Error getting signer:", signerError);
+        
+        // Fallback to first account if user's wallet is not available
+        console.log("Trying fallback to first available account...");
+        const accounts = await provider.listAccounts();
+        if (accounts.length === 0) {
+          console.error('No accounts available');
+          return false;
+        }
+        
+        // Use first account
+        const connectedSigner = await provider.getSigner(accounts[0].address);
+        setSigner(connectedSigner);
+        
+        const address = await connectedSigner.getAddress();
+        setWalletAddress(address);
+        
+        const balance = await provider.getBalance(address);
+        setWalletBalance(ethers.formatEther(balance));
+        
+        setIsConnected(true);
+        console.log("Connected via fallback to:", address);
+        
+        // Update the user's wallet address in the backend
+        await updateWalletAddress(address);
+        
+        return true;
+      }
     } catch (error) {
       console.error('Error connecting wallet:', error);
       return false;
@@ -85,6 +164,7 @@ export const WalletProvider: React.FC<{children: React.ReactNode}> = ({ children
 
   // Disconnect wallet
   const disconnectWallet = () => {
+    console.log("Disconnecting wallet");
     setSigner(null);
     setWalletAddress(null);
     setWalletBalance(null);
@@ -97,7 +177,8 @@ export const WalletProvider: React.FC<{children: React.ReactNode}> = ({ children
     
     try {
       const idToken = await currentUser.getIdToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/user/profile`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${apiUrl}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -5,10 +5,9 @@ This document provides a systematic checklist for manually testing all features 
 ## Authentication
 
 - [ ] **Registration**
-  - [ ] User can register with email, password, and wallet address
+  - [x] User can register with email, password, and wallet address (wallet address automatically assigned)
   - [x] Registration fails with invalid email format
   - [ ] Registration fails with password too short
-  - [ ] Registration fails with invalid wallet address
   - [x] User receives appropriate error messages
 
 - [ ] **Login**
