@@ -1,36 +1,75 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useContracts } from '../../contexts/ContractContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useContracts } from '../../contexts/ContractContext';
+import { useToast } from '../../contexts/ToastContext';
+import { UserApi } from '../../services/api.service';
+import { RentalAgreementApi } from '../../services/rental.service';
+import { useWallet } from '../../contexts/WalletContext';
+
+// UI Components
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { Separator } from '../../components/ui/separator';
-import { Slider } from '../../components/ui/slider';
-import { Home, Calendar, Wallet, Mail, User, Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, Mail, User, Calendar, Wallet, AlertTriangle } from 'lucide-react';
 import { ethers } from 'ethers';
 
 const RentalCreate: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser: user } = useAuth();
+  const { showToast } = useToast();
   const { createRentalAgreement } = useContracts();
-  
+  const { isConnected } = useWallet();
+
   const [formData, setFormData] = useState({
+    name: '',
     tenantEmail: '',
-    propertyAddress: '',
-    propertyNftId: '0', // Default NFT ID
-    rentAmount: '0.1',
+    duration: 12,
+    baseRent: '0.1',
     securityDeposit: '0.2',
-    rentDuration: 12,
-    paymentInterval: 1
   });
-  
-  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const [tenant, setTenant] = useState<{
+    id: string;
+    email: string;
+    name: string;
+    walletAddress: string | null;
+  } | null>(null);
+
+  const [searchingTenant, setSearchingTenant] = useState(false);
+  const [tenantError, setTenantError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [generalError, setGeneralError] = useState('');
-  
+
+  // Calculate the grace period based on security deposit and base rent
+  const calculateGracePeriod = (): number => {
+    if (!formData.securityDeposit || !formData.baseRent || 
+        parseFloat(formData.securityDeposit) <= 0 || 
+        parseFloat(formData.baseRent) <= 0) {
+      return 0;
+    }
+
+    // Calculate grace period as security deposit / base rent
+    let gracePeriod = Math.floor(parseFloat(formData.securityDeposit) / parseFloat(formData.baseRent));
+    
+    // Grace period must be greater than 0
+    if (gracePeriod <= 0) {
+      gracePeriod = 1;
+    }
+    
+    // Grace period must be <= duration/2 as per contract requirements
+    const maxGracePeriod = Math.floor(formData.duration / 2);
+    if (gracePeriod > maxGracePeriod) {
+      gracePeriod = maxGracePeriod;
+    }
+    
+    return gracePeriod;
+  };
+
   // Handle input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -45,94 +84,159 @@ const RentalCreate: React.FC = () => {
       });
     }
   };
-  
-  // Handle slider changes
-  const handleSliderChange = (name: string, value: number[]) => {
-    setFormData(prev => ({ ...prev, [name]: value[0] }));
-  };
-  
-  // Validate form
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    
-    // Validate tenant email
+
+  const findTenant = async () => {
     if (!formData.tenantEmail) {
-      newErrors.tenantEmail = 'Tenant email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.tenantEmail)) {
-      newErrors.tenantEmail = 'Please enter a valid email address';
+      setTenantError('Please enter a tenant email address');
+      return;
     }
-    
-    // Validate property address
-    if (!formData.propertyAddress) {
-      newErrors.propertyAddress = 'Property address is required';
+
+    try {
+      setSearchingTenant(true);
+      setTenantError('');
+      setTenant(null);
+      
+      const response = await UserApi.findUserByEmail(user, formData.tenantEmail);
+      
+      if (response.success && response.data) {
+        setTenant(response.data);
+        showToast('Tenant found!', 'success');
+      } else {
+        setTenantError('No user found with this email address');
+      }
+    } catch (err) {
+      console.error('Error finding tenant:', err);
+      setTenantError('Failed to find tenant. Please try again.');
+    } finally {
+      setSearchingTenant(false);
     }
+  };
+
+  // Validate form
+  const validateForm = (): { [key: string]: string } => {
+    const newErrors: { [key: string]: string } = {};
     
-    // Validate rent amount
-    if (!formData.rentAmount || parseFloat(formData.rentAmount) <= 0) {
-      newErrors.rentAmount = 'Rent amount must be greater than 0';
+    if (!formData.name.trim()) {
+      newErrors.name = 'Agreement name is required';
     }
-    
-    // Validate security deposit
+
+    if (!tenant) {
+      newErrors.tenantEmail = 'Please find and select a tenant';
+    } else if (!tenant.walletAddress) {
+      newErrors.tenantEmail = 'The selected tenant does not have a wallet address';
+    }
+
+    if (!formData.duration || formData.duration <= 0) {
+      newErrors.duration = 'Duration must be greater than 0';
+    } else if (!Number.isInteger(Number(formData.duration))) {
+      newErrors.duration = 'Duration must be a whole number';
+    }
+
+    if (!formData.baseRent || parseFloat(formData.baseRent) <= 0) {
+      newErrors.baseRent = 'Monthly rent is required and must be greater than 0';
+    }
+
     if (!formData.securityDeposit || parseFloat(formData.securityDeposit) <= 0) {
-      newErrors.securityDeposit = 'Security deposit must be greater than 0';
+      newErrors.securityDeposit = 'Security deposit is required and must be greater than 0';
+    } else if (parseFloat(formData.securityDeposit) < parseFloat(formData.baseRent)) {
+      newErrors.securityDeposit = 'Security deposit must be greater than or equal to monthly rent';
     }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    return newErrors;
   };
-  
-  // Calculate end date based on duration
-  const calculateEndDate = (): string => {
-    const startDate = new Date();
-    const endDate = new Date(startDate);
-    endDate.setMonth(startDate.getMonth() + formData.rentDuration);
-    return endDate.toLocaleDateString();
-  };
-  
+
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form first
-    if (!validateForm()) return;
+    // Validate form inputs
+    const newErrors = validateForm();
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
     
     try {
       setLoading(true);
       setGeneralError('');
       
-      // Convert tenant email to wallet address
-      // In a real app, you would get this from your backend or an API
-      // For demo purposes, we're using a placeholder wallet address
-      const tenantAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-      
-      // Create rental agreement on blockchain
-      const agreementAddress = await createRentalAgreement({
-        tenant: tenantAddress,
-        propertyAddress: formData.propertyAddress,
-        propertyNftId: formData.propertyNftId,
-        rentAmount: formData.rentAmount,
-        securityDeposit: formData.securityDeposit,
-        rentDuration: formData.rentDuration,
-        paymentInterval: formData.paymentInterval
-      });
-      
-      if (agreementAddress) {
-        navigate(`/rental/${agreementAddress}`);
-      } else {
-        setGeneralError('Failed to create rental agreement. Please try again.');
+      if (!tenant || !tenant.walletAddress) {
+        throw new Error('Tenant wallet address is missing');
       }
-    } catch (err) {
-      console.error("Error creating rental agreement:", err);
-      setGeneralError('An error occurred while creating the rental agreement. Please try again.');
+
+      // Create rental agreement on the blockchain
+      const result = await createRentalAgreement(
+        tenant.walletAddress,
+        formData.duration,
+        formData.securityDeposit,
+        formData.baseRent,
+        calculateGracePeriod(),
+        formData.name
+      );
+
+      if (!result) {
+        throw new Error('Failed to create rental agreement on the blockchain');
+      }
+
+      // Check if the result is a valid contract address (0x followed by 40 hex chars)
+      const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(result);
+      
+      if (!isContractAddress) {
+        // If it's not a valid contract address, it's likely a transaction hash
+        showToast('Contract created but address could not be retrieved. Using transaction hash instead.', 'warning');
+        console.log('Using transaction hash instead of contract address:', result);
+      }
+
+      // Create rental agreement in the database using either the contract address or tx hash
+      const createdAgreement = await RentalAgreementApi.createRentalAgreement(
+        user,
+        {
+          contractAddress: result, // This could be either the contract address or the tx hash
+          name: formData.name,
+          landlordId: user?.uid || '',
+          tenantId: tenant.id,
+          status: isContractAddress ? 'active' : 'pending', // Mark as pending if we only have the tx hash
+        }
+      );
+
+      if (!createdAgreement.success) {
+        throw new Error('Contract was created on the blockchain, but failed to save to the database.');
+      }
+
+      showToast(
+        isContractAddress 
+          ? 'Rental agreement created successfully!' 
+          : 'Rental agreement transaction submitted. Contract details will be available shortly.',
+        isContractAddress ? 'success' : 'info'
+      );
+      
+      // Navigate to appropriate page
+      if (isContractAddress) {
+        navigate(`/rental/${result}`);
+      } else {
+        navigate('/rental'); // Go to the rental list instead if we only have tx hash
+      }
+    } catch (err: any) {
+      console.error('Error creating rental agreement:', err);
+      
+      // If the error has a data property, it might be a blockchain error with details
+      if (err.data) {
+        setGeneralError(`Blockchain error: ${err.data.message || err.message || 'Unknown error'}`);
+      } else {
+        setGeneralError(err.message || 'Failed to create rental agreement. Please try again.');
+      }
+      
+      showToast('Failed to create rental agreement', 'error');
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
     <div className="max-w-3xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Create Rental Agreement</h1>
-      
+
       <form onSubmit={handleSubmit}>
         <Card className="mb-6">
           <CardHeader>
@@ -143,63 +247,61 @@ const RentalCreate: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="name">Agreement Name <span className="text-red-500">*</span></Label>
+              <Input 
+                id="name"
+                name="name"
+                placeholder="Apartment Rental Agreement"
+                value={formData.name}
+                onChange={handleInputChange}
+                className={errors.name ? "border-red-500" : ""}
+              />
+              {errors.name && (
+                <p className="text-red-500 text-sm">{errors.name}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="tenantEmail">Tenant Email <span className="text-red-500">*</span></Label>
-              <div className="flex">
-                <Mail className="h-4 w-4 mr-2 text-muted-foreground self-center" />
-                <Input 
-                  id="tenantEmail"
-                  name="tenantEmail"
-                  placeholder="tenant@example.com"
-                  value={formData.tenantEmail}
-                  onChange={handleInputChange}
-                  className={errors.tenantEmail ? "border-red-500" : ""}
-                />
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Mail className="h-4 w-4 absolute left-3 top-3 text-muted-foreground" />
+                  <Input 
+                    id="tenantEmail"
+                    name="tenantEmail"
+                    placeholder="tenant@example.com"
+                    value={formData.tenantEmail}
+                    onChange={handleInputChange}
+                    className={`pl-10 ${tenantError ? "border-red-500" : ""}`}
+                  />
+                </div>
+                <Button 
+                  type="button"
+                  onClick={findTenant}
+                  disabled={searchingTenant || !formData.tenantEmail}
+                >
+                  {searchingTenant ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {searchingTenant ? 'Searching...' : 'Find & Select'}
+                </Button>
               </div>
-              {errors.tenantEmail && (
-                <p className="text-red-500 text-sm">{errors.tenantEmail}</p>
+              {tenantError && (
+                <p className="text-red-500 text-sm">{tenantError}</p>
               )}
-              <p className="text-sm text-muted-foreground">
-                The tenant will receive an invitation to accept the rental agreement
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Home className="h-5 w-5 mr-2" /> Property Details
-            </CardTitle>
-            <CardDescription>Enter information about the property being rented</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="propertyAddress">Property Address <span className="text-red-500">*</span></Label>
-              <Input 
-                id="propertyAddress"
-                name="propertyAddress"
-                placeholder="123 Main St, City, State, ZIP"
-                value={formData.propertyAddress}
-                onChange={handleInputChange}
-                className={errors.propertyAddress ? "border-red-500" : ""}
-              />
-              {errors.propertyAddress && (
-                <p className="text-red-500 text-sm">{errors.propertyAddress}</p>
+              {tenant && (
+                <Alert>
+                  <User className="h-4 w-4" />
+                  <AlertTitle>Tenant Found: {tenant.name}</AlertTitle>
+                  <AlertDescription>
+                    Email: {tenant.email}<br />
+                    Wallet Address: {tenant.walletAddress || 'Not set'}
+                    {!tenant.walletAddress && (
+                      <p className="text-amber-600 mt-1 font-medium">
+                        This tenant doesn't have a wallet address. They need to set up their wallet before you can create a rental agreement.
+                      </p>
+                    )}
+                  </AlertDescription>
+                </Alert>
               )}
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="propertyNftId">Property NFT ID (optional)</Label>
-              <Input 
-                id="propertyNftId"
-                name="propertyNftId"
-                placeholder="0"
-                value={formData.propertyNftId}
-                onChange={handleInputChange}
-              />
-              <p className="text-sm text-muted-foreground">
-                If the property is represented as an NFT, enter its ID
-              </p>
             </div>
           </CardContent>
         </Card>
@@ -209,61 +311,34 @@ const RentalCreate: React.FC = () => {
             <CardTitle className="flex items-center">
               <Calendar className="h-5 w-5 mr-2" /> Agreement Duration
             </CardTitle>
-            <CardDescription>Set the duration and payment schedule for the rental</CardDescription>
+            <CardDescription>Set the duration for the rental</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="rentDuration">Rent Duration</Label>
-                <span className="text-sm text-muted-foreground">{formData.rentDuration} months</span>
-              </div>
-              <Slider
-                id="rentDuration"
-                min={1}
-                max={36}
-                step={1}
-                value={[formData.rentDuration]}
-                onValueChange={(value) => handleSliderChange('rentDuration', value)}
-                className="py-4"
+              <Label htmlFor="duration">Rent Duration (months) <span className="text-red-500">*</span></Label>
+              <Input 
+                id="duration"
+                name="duration"
+                type="number"
+                min="1"
+                step="1"
+                value={formData.duration}
+                onChange={handleInputChange}
+                className={errors.duration ? "border-red-500" : ""}
               />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1 mo</span>
-                <span>12 mo</span>
-                <span>24 mo</span>
-                <span>36 mo</span>
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="paymentInterval">Payment Interval</Label>
-                <span className="text-sm text-muted-foreground">Every {formData.paymentInterval} month(s)</span>
-              </div>
-              <Slider
-                id="paymentInterval"
-                min={1}
-                max={3}
-                step={1}
-                value={[formData.paymentInterval]}
-                onValueChange={(value) => handleSliderChange('paymentInterval', value)}
-                className="py-4"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Monthly</span>
-                <span>Bi-monthly</span>
-                <span>Quarterly</span>
-              </div>
+              {errors.duration && (
+                <p className="text-red-500 text-sm">{errors.duration}</p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                Specify the number of months for the rental agreement
+              </p>
             </div>
             
             <div className="rounded-lg bg-muted p-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Start Date:</span>
                   <span className="font-medium ml-2">{new Date().toLocaleDateString()}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">End Date:</span>
-                  <span className="font-medium ml-2">{calculateEndDate()}</span>
                 </div>
               </div>
             </div>
@@ -279,25 +354,25 @@ const RentalCreate: React.FC = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="rentAmount">Monthly Rent (ETH) <span className="text-red-500">*</span></Label>
+              <Label htmlFor="baseRent">Monthly Rent (ETH) <span className="text-red-500">*</span></Label>
               <div className="flex">
                 <Input 
-                  id="rentAmount"
-                  name="rentAmount"
+                  id="baseRent"
+                  name="baseRent"
                   type="number"
                   step="0.01"
                   min="0.01"
-                  value={formData.rentAmount}
+                  value={formData.baseRent}
                   onChange={handleInputChange}
-                  className={errors.rentAmount ? "border-red-500" : ""}
+                  className={errors.baseRent ? "border-red-500" : ""}
                 />
                 <span className="ml-2 self-center font-medium">ETH</span>
               </div>
-              {errors.rentAmount && (
-                <p className="text-red-500 text-sm">{errors.rentAmount}</p>
+              {errors.baseRent && (
+                <p className="text-red-500 text-sm">{errors.baseRent}</p>
               )}
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="securityDeposit">Security Deposit (ETH) <span className="text-red-500">*</span></Label>
               <div className="flex">
@@ -317,7 +392,7 @@ const RentalCreate: React.FC = () => {
                 <p className="text-red-500 text-sm">{errors.securityDeposit}</p>
               )}
             </div>
-            
+
             <Separator className="my-4" />
             
             <div className="rounded-lg bg-muted p-4">
@@ -325,7 +400,7 @@ const RentalCreate: React.FC = () => {
               <div className="space-y-2">
                 <div className="flex justify-between py-1 text-sm">
                   <span>Monthly Rent:</span>
-                  <span className="font-medium">{formData.rentAmount} ETH</span>
+                  <span className="font-medium">{formData.baseRent} ETH</span>
                 </div>
                 <div className="flex justify-between py-1 text-sm">
                   <span>Security Deposit:</span>
@@ -333,12 +408,20 @@ const RentalCreate: React.FC = () => {
                 </div>
                 <div className="flex justify-between py-1 text-sm">
                   <span>Total Duration:</span>
-                  <span className="font-medium">{formData.rentDuration} months</span>
+                  <span className="font-medium">{formData.duration} months</span>
+                </div>
+                <div className="flex justify-between py-1 text-sm">
+                  <span>Grace Period:</span>
+                  <span className="font-medium">{calculateGracePeriod()} months</span>
+                </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  Grace period is automatically calculated as security deposit ÷ monthly rent, 
+                  capped at duration ÷ 2 months per the contract requirements. This is the period during which late fees won't apply.
                 </div>
                 <Separator className="my-1" />
                 <div className="flex justify-between py-1 text-sm font-medium">
                   <span>Total Contract Value:</span>
-                  <span>{(parseFloat(formData.rentAmount) * formData.rentDuration + parseFloat(formData.securityDeposit)).toFixed(4)} ETH</span>
+                  <span>{(parseFloat(formData.baseRent) * formData.duration + parseFloat(formData.securityDeposit)).toFixed(4)} ETH</span>
                 </div>
               </div>
             </div>
@@ -346,7 +429,7 @@ const RentalCreate: React.FC = () => {
         </Card>
         
         {generalError && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert className="mb-6">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{generalError}</AlertDescription>
@@ -354,16 +437,16 @@ const RentalCreate: React.FC = () => {
         )}
         
         <div className="flex justify-between items-center">
-          <Button 
+          <Button
             type="button" 
             variant="outline"
             onClick={() => navigate('/rental')}
           >
             Cancel
           </Button>
-          <Button 
+          <Button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isConnected || !tenant || !tenant.walletAddress}
           >
             {loading ? (
               <>

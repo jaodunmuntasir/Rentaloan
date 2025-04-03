@@ -19,18 +19,15 @@ interface ContractContextType {
   loanFactory: Contract | null;
   getRentalContract: (address: string) => Promise<Contract | null>;
   getLoanContract: (address: string) => Promise<Contract | null>;
-  createRentalAgreement: (params: CreateRentalParams) => Promise<string | null>;
+  createRentalAgreement: (
+    tenant: string,
+    duration: number,
+    securityDeposit: string,
+    baseRent: string,
+    gracePeriod: number,
+    name: string
+  ) => Promise<string | null>;
   createLoanAgreement: (params: CreateLoanParams) => Promise<string | null>;
-}
-
-interface CreateRentalParams {
-  tenant: string;
-  propertyAddress: string;
-  propertyNftId: string;
-  rentAmount: string;
-  securityDeposit: string;
-  rentDuration: number;
-  paymentInterval: number;
 }
 
 interface CreateLoanParams {
@@ -123,37 +120,63 @@ export const ContractProvider: React.FC<{children: React.ReactNode}> = ({ childr
   };
 
   // Create a rental agreement
-  const createRentalAgreement = async (params: CreateRentalParams): Promise<string | null> => {
+  const createRentalAgreement = async (
+    tenant: string,
+    duration: number,
+    securityDeposit: string,
+    baseRent: string,
+    gracePeriod: number,
+    name: string
+  ): Promise<string | null> => {
     if (!rentalFactory || !signer) return null;
 
     try {
-      const rentAmountWei = ethers.parseEther(params.rentAmount);
-      const securityDepositWei = ethers.parseEther(params.securityDeposit);
+      const baseRentWei = ethers.parseEther(baseRent);
+      const securityDepositWei = ethers.parseEther(securityDeposit);
 
-      const tx = await rentalFactory.createRentalAgreement(
-        params.tenant,
-        params.propertyAddress,
-        params.propertyNftId,
-        rentAmountWei,
+      console.log("Creating rental agreement with params:", {
+        tenant,
+        loanFactory: CONTRACT_ADDRESSES.LOAN_FACTORY,
+        duration,
+        securityDepositWei: securityDepositWei.toString(),
+        baseRentWei: baseRentWei.toString(),
+        gracePeriod,
+        name
+      });
+
+      // The createAgreement function returns the address directly
+      const contractAddress = await rentalFactory.createAgreement.staticCall(
+        tenant,
+        CONTRACT_ADDRESSES.LOAN_FACTORY,
+        duration,
         securityDepositWei,
-        params.rentDuration,
-        params.paymentInterval
+        baseRentWei,
+        gracePeriod,
+        name
+      );
+      
+      console.log("Simulated contract address:", contractAddress);
+      
+      // Now execute the actual transaction
+      const tx = await rentalFactory.createAgreement(
+        tenant,
+        CONTRACT_ADDRESSES.LOAN_FACTORY,
+        duration,
+        securityDepositWei,
+        baseRentWei,
+        gracePeriod,
+        name
       );
 
+      console.log("Transaction hash:", tx.hash);
       const receipt = await tx.wait();
+      console.log("Transaction receipt:", receipt);
       
-      // Extract the created contract address from events
-      const event = receipt.logs
-        .filter((log: any) => 
-          log.topics[0] === rentalFactory.getEvent('RentalAgreementCreated').fragment.topicHash
-        )
-        .map((log: any) => rentalFactory.interface.parseLog(log))
-        [0];
-      
-      return event.args.contractAddress;
+      // Return the simulated contract address
+      return contractAddress;
     } catch (error) {
       console.error('Error creating rental agreement:', error);
-      return null;
+      throw new Error('Failed to create rental agreement on the blockchain');
     }
   };
 

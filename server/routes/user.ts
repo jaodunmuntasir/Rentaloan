@@ -277,4 +277,39 @@ router.get('/payments', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// Find a user by email
+// @ts-ignore
+router.get('/find', authenticate, async (req: Request, res: Response) => {
+  try {
+    // Ensure the user is authenticated
+    const userId = req.user?.uid;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { email } = req.query;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    // Find the user by email
+    const user = await User.findOne({
+      where: { email: email.toLowerCase() },
+      attributes: ['id', 'email', 'name', 'walletAddress']
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    return res.json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 export default router; 

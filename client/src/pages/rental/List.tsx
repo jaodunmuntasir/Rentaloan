@@ -12,7 +12,7 @@ const RentalList: React.FC = () => {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Your Rental Agreements</h1>
         <Button 
-          onClick={() => navigate('/rental/new')}
+          onClick={() => navigate('/rental/create')}
           className="flex items-center"
         >
           <PlusCircle className="mr-2 h-4 w-4" />

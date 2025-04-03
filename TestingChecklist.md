@@ -24,7 +24,7 @@ This document provides a systematic checklist for manually testing all features 
 ## Landlord Perspective
 
 - [ ] **Rental Agreement Creation**
-  - [ ] Landlord can access the create rental agreement page
+  - [x] Landlord can access the create rental agreement page
   - [ ] Form validates required fields (address, tenant wallet address, duration, etc.)
   - [ ] Landlord can set security deposit and monthly rent amounts
   - [ ] Landlord can set grace period for late payments

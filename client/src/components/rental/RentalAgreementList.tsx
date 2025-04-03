@@ -136,18 +136,23 @@ const RentalAgreementList: React.FC = () => {
       try {
         setLoading(true);
         
-        // For demo purposes, assume wallet address is uid or get it from currentUser
-        const userWalletAddress = currentUser.uid; // Use appropriate field based on your auth model
+        console.log("Fetching rental agreements for user:", currentUser.uid);
         
-        // Get addresses of agreements where user is tenant
-        const tenantAgreements = await rentalFactory.getAgreementsForTenant(userWalletAddress);
+        // Get agreements where user is renter/tenant
+        const tenantAgreements = await rentalFactory.getRenterAgreements();
+        console.log("Renter agreements:", tenantAgreements);
         
-        // Get addresses of agreements where user is landlord
-        const landlordAgreements = await rentalFactory.getAgreementsForLandlord(userWalletAddress);
+        // Get agreements where user is landlord
+        const landlordAgreements = await rentalFactory.getLandlordAgreements();
+        console.log("Landlord agreements:", landlordAgreements);
         
-        // Combine and remove duplicates (using Array.from to safely convert iterable to array)
-        const allAddressesArray = [...tenantAgreements, ...landlordAgreements];
-        const allAddresses = Array.from(new Set(allAddressesArray));
+        // Extract the contract addresses
+        const tenantAddresses = tenantAgreements.map((info: any) => info.contractAddress);
+        const landlordAddresses = landlordAgreements.map((info: any) => info.contractAddress);
+        
+        // Combine and remove duplicates
+        const allAddresses = Array.from(new Set([...tenantAddresses, ...landlordAddresses]));
+        console.log("All agreement addresses:", allAddresses);
         
         // Fetch details for each agreement
         const agreementPromises = allAddresses.map(async (address) => {
@@ -156,35 +161,75 @@ const RentalAgreementList: React.FC = () => {
             const contract = await getRentalContract(address);
             if (!contract) return null;
             
-            // Fetch contract data
-            const landlord = await contract.landlord();
-            const tenant = await contract.tenant();
-            const propertyAddress = await contract.propertyAddress();
-            const rentAmount = ethers.formatEther(await contract.rentAmount());
-            const isActive = await contract.isActive();
-            const securityDepositPaid = await contract.securityDepositPaid();
+            console.log("Fetching details for contract:", address);
             
-            // Additional properties that would normally come from contract or API
-            const propertyName = 'Property ' + address.substring(0, 6);
-            const isExpired = false; // This would be calculated based on contract dates
-            const isTerminated = false; // This would come from contract state
-            const startDate = new Date();
-            const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000); // +30 days
-            
-            return {
-              address,
-              name: propertyName,
-              propertyAddress,
-              isActive,
-              isExpired,
-              isTerminated,
-              rentAmount,
-              tenant,
-              landlord,
-              securityDepositPaid,
-              startDate,
-              endDate
-            };
+            // Try to fetch basic contract data (adapt to actual contract methods)
+            try {
+              // Get details from the contract
+              const details = await contract.getContractDetails();
+              console.log("Contract details:", details);
+              
+              // Extract values from the returned array (format depends on contract implementation)
+              const landlord = details[0]; // First element is usually the landlord address
+              const tenant = details[1]; // Second element is usually the tenant/renter address
+              const rentAmount = ethers.formatEther(details[3]); // Assuming index 3 is the rent amount
+              
+              // Check for deposit paid status and active state
+              let depositStatus = false;
+              try {
+                // Try to call a direct function if it exists
+                depositStatus = await contract.securityDepositPaid();
+              } catch (depositError) {
+                console.log("Couldn't get deposit status via direct method:", depositError);
+                // Use details from getContractDetails instead
+                depositStatus = details[4] > 0; // If there's a positive security deposit, consider it paid
+              }
+              console.log("Deposit status:", depositStatus);
+              
+              // Create a property address from the contract address
+              const propertyAddress = `Property at ${address.substring(0, 10)}...`;
+              
+              // Additional properties 
+              const propertyName = 'Property ' + address.substring(0, 6);
+              const isActive = true; // Default to true if no direct method exists
+              const isExpired = false; 
+              const isTerminated = false;
+              const startDate = new Date();
+              const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000); // +30 days
+              
+              return {
+                address,
+                name: propertyName,
+                propertyAddress,
+                isActive,
+                isExpired,
+                isTerminated,
+                rentAmount,
+                tenant,
+                landlord,
+                securityDepositPaid: depositStatus,
+                startDate,
+                endDate
+              };
+            } catch (contractError) {
+              console.error(`Error accessing contract data for ${address}:`, contractError);
+              
+              // Fallback to simplified data
+              return {
+                address,
+                name: `Property ${address.substring(0, 6)}`,
+                propertyAddress: `Address for ${address.substring(0, 10)}...`,
+                isActive: true,
+                isExpired: false,
+                isTerminated: false,
+                rentAmount: "0",
+                tenant: "Unknown",
+                landlord: "Unknown",
+                securityDepositPaid: false,
+                startDate: new Date(),
+                endDate: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000) 
+              };
+            }
           } catch (err) {
             console.error(`Error fetching details for agreement ${address}:`, err);
             return null;
@@ -248,7 +293,7 @@ const RentalAgreementList: React.FC = () => {
           <p className="text-muted-foreground mb-4">
             Get started by creating a new rental agreement
           </p>
-          <Button onClick={() => navigate('/rental/new')}>
+          <Button onClick={() => navigate('/rental/create')}>
             Create Rental Agreement
           </Button>
         </CardContent>
