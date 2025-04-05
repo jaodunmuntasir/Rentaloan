@@ -14,16 +14,16 @@ const Loan: React.FC = () => {
       description: 'View your active loans'
     },
     { 
+      path: '/loan/myrequests', 
+      label: 'My Loan Requests', 
+      icon: <CreditCard className="h-4 w-4" />,
+      description: 'View your loan requests'
+    },
+    { 
       path: '/loan/requests', 
       label: 'Browse Loan Requests', 
       icon: <CreditCard className="h-4 w-4" />,
       description: 'Find loan opportunities'
-    },
-    { 
-      path: '/loan/request/create', 
-      label: 'Request a Loan', 
-      icon: <PlusCircle className="h-4 w-4" />,
-      description: 'Create a new loan request'
     },
   ];
   

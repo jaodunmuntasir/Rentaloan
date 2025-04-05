@@ -354,6 +354,28 @@ const PayRent: React.FC<PayRentProps> = ({
             </AlertDescription>
           </Alert>
         )}
+        
+        {parseFloat(typedDetails.dueAmount) > 0 && (
+          <Alert className="bg-blue-50 border-blue-200">
+            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center w-full gap-4">
+              <div className="flex items-start">
+                <AlertTriangle className="h-4 w-4 text-blue-600 mr-2 mt-0.5" />
+                <div>
+                  <AlertTitle className="text-blue-600">Need help with your rent payment?</AlertTitle>
+                  <AlertDescription>
+                    You can request a loan for your rent payment using your security deposit as collateral.
+                  </AlertDescription>
+                </div>
+              </div>
+              <Button variant="outline" className="border-blue-300 hover:bg-blue-100 text-blue-600" asChild>
+                <a href={`/rental/${contractAddress}/loan/request/create`}>
+                  <ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Request a Loan
+                </a>
+              </Button>
+            </div>
+          </Alert>
+        )}
       </CardContent>
       <CardFooter className={showSkipOption ? "flex flex-col space-y-2" : ""}>
         <Button
@@ -390,17 +412,6 @@ const PayRent: React.FC<PayRentProps> = ({
                 Skip Rent for Month {selectedMonth}
               </>
             )}
-          </Button>
-        )}
-        
-        {/* Request a Loan button */}
-        {(details as any).status !== 2 && (
-          <Button
-            className="w-full mt-2"
-            variant="secondary"
-            onClick={() => window.location.href = '/loans/request'}
-          >
-            Request a Loan
           </Button>
         )}
       </CardFooter>

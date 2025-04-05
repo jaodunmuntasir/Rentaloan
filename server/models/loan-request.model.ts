@@ -48,6 +48,13 @@ export class LoanRequest extends Model {
   duration!: number;
 
   @Column({
+    type: DataType.DECIMAL(5, 2),
+    allowNull: false,
+    defaultValue: 5.0 // Default interest rate of 5%
+  })
+  interestRate!: number;
+
+  @Column({
     type: DataType.ENUM(...Object.values(LoanRequestStatus)),
     allowNull: false,
     defaultValue: LoanRequestStatus.OPEN

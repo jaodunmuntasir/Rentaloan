@@ -163,8 +163,17 @@ export function useLoanAgreement(contractAddress?: string) {
       
       // Update backend
       if (currentUser) {
+        // Convert Firebase User to App User
+        const appUser = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+
         await LoanApi.initializeLoan(
-          currentUser,
+          appUser,
           contractAddress,
           receipt.hash
         );
@@ -213,8 +222,17 @@ export function useLoanAgreement(contractAddress?: string) {
       
       // Update backend
       if (currentUser) {
+        // Convert Firebase User to App User
+        const appUser = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+
         await LoanApi.makeRepayment(
-          currentUser,
+          appUser,
           contractAddress,
           month,
           repayment.amount,

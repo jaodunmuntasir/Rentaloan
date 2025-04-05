@@ -42,71 +42,129 @@ const convertBigIntToString = (obj: any): any => {
 // @ts-ignore
 router.post('/request', authenticate, async (req: Request, res: Response) => {
   try {
-    const { rentalAgreementAddress, amount, duration } = req.body;
-    
-    if (!rentalAgreementAddress || !amount || !duration) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    // Ensure user is defined
+    if (!req.user) {
+      res.status(401).json({ 
+        success: false, 
+        message: "Unauthorized" 
+      });
+      return;
     }
-    
+
+    // Destructure with renamed parameter
+    const { rentalAgreementAddress, requestedAmount, loanDuration, interestRate } = req.body;
+
+    // Validate required fields
+    if (!rentalAgreementAddress || !requestedAmount || !loanDuration || !interestRate) {
+      res.status(400).json({ 
+        success: false, 
+        message: "Missing required fields" 
+      });
+      return;
+    }
+
+    // Validate requestedAmount format
+    if (isNaN(parseFloat(requestedAmount)) || parseFloat(requestedAmount) <= 0) {
+      res.status(400).json({ 
+        success: false, 
+        message: "Invalid amount format" 
+      });
+      return;
+    }
+
+    // Validate loan duration
+    if (isNaN(loanDuration) || loanDuration < 1) {
+      res.status(400).json({
+        success: false,
+        message: "Loan duration must be at least 1 month"
+      });
+      return;
+    }
+
+    // Validate interest rate
+    if (isNaN(interestRate) || interestRate < 1) {
+      res.status(400).json({
+        success: false,
+        message: "Interest rate must be at least 1%"
+      });
+      return;
+    }
+
     // Find the requester
-    const requester = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    const requester = await User.findOne({ where: { firebaseId: req.user.uid } });
     if (!requester) {
-      return res.status(404).json({ message: 'Requester not found' });
+      res.status(404).json({ 
+        success: false, 
+        message: 'Requester not found' 
+      });
+      return;
     }
-    
-    // Find the rental agreement
+
+    // Verify user has permission to create loan request for this rental agreement
     const rentalAgreement = await RentalAgreement.findOne({ 
       where: { contractAddress: rentalAgreementAddress } 
     });
-    
+
     if (!rentalAgreement) {
-      return res.status(404).json({ message: 'Rental agreement not found' });
-    }
-    
-    // Check if the requester is the renter for this agreement
-    if (rentalAgreement.renterId !== requester.id) {
-      return res.status(403).json({ message: 'Only the renter can request a loan for this agreement' });
-    }
-    
-    // Check if the rental agreement is in ACTIVE state
-    if (rentalAgreement.status !== RentalAgreementStatus.ACTIVE) {
-      return res.status(400).json({ message: 'Rental agreement is not active' });
-    }
-    
-    // Check if there's enough collateral available
-    const availableCollateral = await blockchainService.getAvailableCollateral(rentalAgreementAddress);
-    if (parseFloat(availableCollateral) < amount) {
-      return res.status(400).json({ 
-        message: 'Insufficient collateral available',
-        available: availableCollateral,
-        requested: amount
+      res.status(404).json({ 
+        success: false, 
+        message: "Rental agreement not found" 
       });
+      return;
     }
-    
-    // Create the loan request in the database
+
+    // Check if user is the tenant of the rental agreement
+    if (rentalAgreement.renterId !== requester.id) {
+      res.status(403).json({ 
+        success: false, 
+        message: "You don't have permission to create a loan request for this rental agreement" 
+      });
+      return;
+    }
+
+    // Create loan request record with the interest rate
     const loanRequest = await LoanRequest.create({
       rentalAgreementId: rentalAgreement.id,
       requesterId: requester.id,
-      amount,
-      duration,
+      amount: requestedAmount,
+      duration: loanDuration,
+      interestRate: interestRate,
       status: LoanRequestStatus.OPEN
     });
-    
+
+    // Fetch the created loan request with associated data
+    const completeRequest = await LoanRequest.findByPk(loanRequest.id, {
+      include: [
+        { 
+          model: RentalAgreement,
+          include: [
+            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] },
+            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
+          ]
+        },
+        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
+      ]
+    });
+
+    console.log('Created loan request:', {
+      id: loanRequest.id,
+      requesterId: loanRequest.requesterId,
+      requesterFirebaseId: requester.firebaseId,
+      status: loanRequest.status
+    });
+
+    // Return success response
     res.status(201).json({
-      message: 'Loan request created successfully',
-      loanRequest: {
-        id: loanRequest.id,
-        rentalAgreementId: loanRequest.rentalAgreementId,
-        amount: loanRequest.amount,
-        duration: loanRequest.duration,
-        status: loanRequest.status
-      }
+      success: true,
+      message: "Loan request created successfully",
+      loanRequest: completeRequest
     });
   } catch (error) {
-    console.error('Error creating loan request:', error);
-    res.status(500).json({
-      message: 'Failed to create loan request',
-      error: (error as Error).message
+    console.error("Error creating loan request:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to create loan request", 
+      error: error instanceof Error ? error.message : String(error) 
     });
   }
 });
@@ -115,32 +173,55 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
 // @ts-ignore
 router.get('/requests', authenticate, async (req: Request, res: Response) => {
   try {
+    console.log('GET /requests - Authenticated user ID:', req.user?.uid);
+    
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!user) {
+      console.log('User not found with Firebase ID:', req.user?.uid);
       return res.status(404).json({ message: 'User not found' });
     }
     
-    // Get all open loan requests
+    console.log('Found user in database:', user.id, user.email);
+    
+    // Get all open loan requests with complete user data
     const loanRequests = await LoanRequest.findAll({
-      where: { status: LoanRequestStatus.OPEN },
       include: [
         { 
           model: RentalAgreement,
           include: [
-            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] },
+            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
           ]
         },
-        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
       ]
     });
     
-    res.json({ loanRequests });
+    console.log(`Found ${loanRequests.length} loan requests`);
+    
+    // Add a simplified version of the requests for logging
+    const simplifiedRequests = loanRequests.map(req => ({
+      id: req.id,
+      requesterId: req.requesterId,
+      requesterEmail: req.requester?.email,
+      requesterFirebaseId: req.requester?.firebaseId,
+      status: req.status
+    }));
+    
+    console.log('Simplified request data:', JSON.stringify(simplifiedRequests));
+    
+    res.json({ 
+      success: true,
+      currentUserId: user.id,
+      currentUserFirebaseId: user.firebaseId,
+      loanRequests 
+    });
   } catch (error) {
     console.error('Error retrieving loan requests:', error);
     res.status(500).json({
+      success: false,
       message: 'Failed to retrieve loan requests',
-      error: (error as Error).message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });

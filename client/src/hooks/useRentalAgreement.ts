@@ -4,6 +4,7 @@ import { useContracts } from '../contexts/ContractContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 import { RentalAgreementApi as RentalApi } from '../services/rental.service';
+import { BlockchainService } from '../services/blockchain.service';
 
 interface RentalAgreementDetails {
   landlord: string;
@@ -28,6 +29,9 @@ interface RentalAgreementDetails {
   renterDetails?: any;
   dueAmount: string;
   status: number;
+  address: string;
+  landlordAddress: string;
+  tenantAddress: string;
 }
 
 export function useRentalAgreement(contractAddress?: string) {
@@ -216,7 +220,12 @@ export function useRentalAgreement(contractAddress?: string) {
           userRole: apiData.userRole,
           landlordDetails: apiData.landlordDetails,
           renterDetails: apiData.renterDetails
-        })
+        }),
+        
+        // New fields from BlockchainService
+        address: contractAddress,
+        landlordAddress: blockchainData.landlord,
+        tenantAddress: blockchainData.tenant
       });
     } catch (err: any) {
       setError(err.message || "Error loading rental details");
@@ -456,4 +465,72 @@ export function useRentalAgreement(contractAddress?: string) {
     skipRent,
     extendRental
   };
-} 
+}
+
+export const useRentalAgreementByAddress = (contractAddress: string) => {
+  const { currentUser } = useAuth();
+  const [details, setDetails] = useState<RentalAgreementDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchRentalAgreement = async () => {
+      if (!contractAddress || !currentUser) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Get rental agreement details from blockchain
+        const rentalDetails = await BlockchainService.getRentalAgreementDetails(contractAddress);
+        
+        // Get available collateral (which would be the security deposit or any remaining funds)
+        const collateralInfo = await BlockchainService.getAvailableCollateral(contractAddress);
+        
+        // Get amount due for next payment
+        const dueAmountInfo = await BlockchainService.getDueAmount(contractAddress);
+
+        const agreementDetails: RentalAgreementDetails = {
+          // Required properties from interface
+          landlord: rentalDetails.landlord || '',
+          tenant: rentalDetails.tenant || '',
+          propertyAddress: 'Property address not available',
+          propertyNftId: '0',
+          rentAmount: rentalDetails.rentAmount || '0',
+          securityDeposit: collateralInfo.availableAmount || '0',
+          rentDuration: rentalDetails.rentDuration || 0,
+          paymentInterval: 30, // Default: monthly (30 days)
+          nextPaymentDate: new Date(),
+          isActive: rentalDetails.isActive || false,
+          securityDepositPaid: true, // Assume paid if we can see the agreement
+          currentRentPaid: false,
+          gracePeriod: 3, // Default grace period
+          currentSecurityDeposit: collateralInfo.availableAmount || '0',
+          dueAmount: dueAmountInfo.dueAmount || '0',
+          status: rentalDetails.isActive ? 1 : 0, // Active = 1, Inactive = 0
+          address: contractAddress,
+          landlordAddress: rentalDetails.landlord || '',
+          tenantAddress: rentalDetails.tenant || '',
+          
+          // Optional properties
+          name: `Rental Agreement #${contractAddress.substring(0, 6)}`,
+          lastPaidMonth: rentalDetails.lastPaidMonth || 0
+        };
+
+        setDetails(agreementDetails);
+      } catch (err) {
+        console.error('Error fetching rental agreement:', err);
+        setError('Failed to load rental agreement details. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRentalAgreement();
+  }, [contractAddress, currentUser]);
+
+  return { details, loading, error };
+}; 

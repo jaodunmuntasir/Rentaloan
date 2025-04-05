@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useContracts } from '../../contexts/ContractContext';
+import { useRentalAgreement } from '../../hooks/useRentalAgreement';
+import { LoanApi } from '../../services/api.service';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Slider } from '../../components/ui/slider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import { Separator } from '../../components/ui/separator';
 import { 
@@ -21,96 +21,60 @@ import {
   Home
 } from 'lucide-react';
 
-// Types for rental properties
-interface RentalProperty {
-  address: string;
-  contractAddress: string;
-  propertyAddress: string;
-  rentAmount: string;
-  rentDuration: number;
-  isActive: boolean;
-}
-
 const RequestCreate: React.FC = () => {
+  const { address } = useParams<{ address: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { loanFactory } = useContracts();
+  const { details, loading, error: rentalError } = useRentalAgreement(address || '');
   
   // State
-  const [loading, setLoading] = useState(false);
   const [creatingRequest, setCreatingRequest] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rentalProperties, setRentalProperties] = useState<RentalProperty[]>([]);
-  const [loadingProperties, setLoadingProperties] = useState(true);
   
   // Form state
-  const [loanAmount, setLoanAmount] = useState('1.0');
-  const [selectedProperty, setSelectedProperty] = useState<string>('');
-  const [loanDuration, setLoanDuration] = useState(12);
+  const [loanAmount, setLoanAmount] = useState('0.1');
+  const [loanDuration, setLoanDuration] = useState(3);
   const [interestRate, setInterestRate] = useState(5);
-  const [graceMonths, setGraceMonths] = useState(1);
   
-  // Load rental properties to use as collateral
+  // Update default loan amount when details are loaded
   useEffect(() => {
-    const fetchRentalProperties = async () => {
-      try {
-        setLoadingProperties(true);
-        
-        // In a real app, this would be fetched from the blockchain
-        // For now, using mock data
-        const mockProperties: RentalProperty[] = [
-          {
-            address: '0x1234567890123456789012345678901234567890',
-            contractAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-            propertyAddress: '123 Main St, New York, NY',
-            rentAmount: '0.2',
-            rentDuration: 12,
-            isActive: true
-          },
-          {
-            address: '0x2345678901234567890123456789012345678901',
-            contractAddress: '0xbcdefabcdefabcdefabcdefabcdefabcdefabcde',
-            propertyAddress: '456 Park Ave, Chicago, IL',
-            rentAmount: '0.15',
-            rentDuration: 24,
-            isActive: true
-          },
-          {
-            address: '0x3456789012345678901234567890123456789012',
-            contractAddress: '0xcdefabcdefabcdefabcdefabcdefabcdefabcdef',
-            propertyAddress: '789 Ocean Blvd, Miami, FL',
-            rentAmount: '0.25',
-            rentDuration: 6,
-            isActive: true
-          }
-        ];
-        
-        setRentalProperties(mockProperties);
-        
-        // Auto-select first property if available
-        if (mockProperties.length > 0) {
-          setSelectedProperty(mockProperties[0].address);
-        }
-      } catch (err) {
-        console.error("Error fetching rental properties:", err);
-        setError('Failed to load your rental properties. Please try again.');
-      } finally {
-        setLoadingProperties(false);
-      }
-    };
-    
-    fetchRentalProperties();
-  }, []);
+    if (details && details.dueAmount) {
+      // Set to the max loan amount which includes due amount plus current rent
+      const maxAmount = calculateMaxLoanAmount();
+      setLoanAmount(maxAmount);
+    }
+  }, [details]);
   
-  // Calculate maximum loan amount based on selected property
+  // Calculate maximum loan amount based on the dueAmount plus current month's rent
   const calculateMaxLoanAmount = (): string => {
-    const property = rentalProperties.find(p => p.address === selectedProperty);
-    if (!property) return '0';
+    if (!details || (!details.dueAmount && !details.rentAmount)) return '0';
     
-    // In this simple model, max loan amount is rental amount * duration * 0.8
-    // This represents 80% of the total rent value over the full term
-    const totalRentValue = parseFloat(property.rentAmount) * property.rentDuration;
-    return (totalRentValue * 0.8).toFixed(2);
+    // Add the due amount and the current month's base rent
+    const dueAmount = parseFloat(details.dueAmount || '0');
+    const baseRent = parseFloat(details.rentAmount || '0');
+    const maxAmount = dueAmount + baseRent;
+    
+    return maxAmount.toString();
+  };
+  
+  // Calculate remaining rental duration minus 1 (can't loan for the entire remaining period)
+  const calculateRemainingDuration = (): number => {
+    if (!details || !details.rentDuration || details.lastPaidMonth === undefined) return 0;
+    
+    // Remaining duration is total duration minus last paid month minus 1
+    const remainingMonths = Math.max(0, details.rentDuration - details.lastPaidMonth - 1);
+    
+    return remainingMonths;
+  };
+  
+  // Check if the security deposit is sufficient for the requested loan amount
+  const isSecurityDepositSufficient = (): boolean => {
+    if (!details || !details.currentSecurityDeposit) return false;
+    
+    const currentSecurityDeposit = parseFloat(details.currentSecurityDeposit);
+    const maxLoanAmount = parseFloat(calculateMaxLoanAmount());
+    
+    return currentSecurityDeposit >= maxLoanAmount;
   };
   
   // Calculate estimated monthly payment based on loan parameters
@@ -150,16 +114,18 @@ const RequestCreate: React.FC = () => {
   const isFormValid = (): boolean => {
     const maxLoanAmount = parseFloat(calculateMaxLoanAmount());
     const requestedAmount = parseFloat(loanAmount);
+    const remainingDuration = calculateRemainingDuration();
     
+    // Add security deposit validation to the form validation checks
     return (
-      selectedProperty !== '' &&
+      address !== undefined &&
       requestedAmount > 0 &&
       requestedAmount <= maxLoanAmount &&
-      loanDuration >= 3 && 
-      loanDuration <= 36 &&
-      interestRate > 0 &&
-      graceMonths >= 0 &&
-      graceMonths <= 3
+      loanDuration >= 1 && 
+      loanDuration <= remainingDuration &&
+      interestRate >= 1 &&
+      isSecurityDepositSufficient() &&
+      remainingDuration > 0 // Can't create loan if remaining duration is 0
     );
   };
   
@@ -168,14 +134,12 @@ const RequestCreate: React.FC = () => {
     setLoanDuration(value[0]);
   };
   
-  // Handle interest rate slider change
-  const handleInterestRateChange = (value: number[]) => {
-    setInterestRate(value[0]);
-  };
-  
-  // Handle grace months slider change
-  const handleGraceMonthsChange = (value: number[]) => {
-    setGraceMonths(value[0]);
+  // Handle interest rate change
+  const handleInterestRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    if (value === '' || (/^\d*\.?\d*$/.test(value) && parseFloat(value) >= 1)) {
+      setInterestRate(parseFloat(value) || 1);
+    }
   };
   
   // Handle loan amount change
@@ -184,6 +148,12 @@ const RequestCreate: React.FC = () => {
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
       setLoanAmount(value);
     }
+  };
+  
+  // Format address for display
+  const formatAddress = (address: string): string => {
+    if (!address) return '';
+    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
   
   // Handle submission
@@ -199,20 +169,33 @@ const RequestCreate: React.FC = () => {
     setError(null);
     
     try {
-      // In a real app, this would create a blockchain transaction
-      console.log('Creating loan request with:', {
-        loanAmount,
-        selectedProperty,
-        loanDuration,
-        interestRate,
-        graceMonths
+      if (!address || !currentUser) {
+        throw new Error('Missing required data');
+      }
+      
+      // Convert Firebase User to App User
+      const appUser = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
+      
+      // Create loan request via API
+      const response = await LoanApi.createLoanRequest(appUser, {
+        rentalAgreementAddress: address,
+        requestedAmount: loanAmount,
+        loanDuration: loanDuration,
+        interestRate: interestRate
       });
       
-      // Simulate transaction processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Redirect to the loan requests list
-      navigate('/loan/request');
+      if (response && response.loanRequest) {
+        // Redirect to the my loan requests list
+        navigate('/loan/myrequests');
+      } else {
+        setError('Failed to create loan request. Please try again.');
+      }
     } catch (err) {
       console.error("Error creating loan request:", err);
       setError('Failed to create loan request. Please try again.');
@@ -221,270 +204,228 @@ const RequestCreate: React.FC = () => {
     }
   };
   
-  // Format address for display
-  const formatAddress = (address: string): string => {
-    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-  };
+  if (!address) {
+    return (
+      <Card className="max-w-md mx-auto mt-8">
+        <CardHeader>
+          <CardTitle>Error</CardTitle>
+          <CardDescription>No rental agreement address provided</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline" className="w-full">
+            <a href="/dashboard">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
   
-  // Get selected property details
-  const selectedPropertyDetails = rentalProperties.find(p => p.address === selectedProperty);
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="ml-2">Loading rental agreement details...</span>
+      </div>
+    );
+  }
   
-  // Check loan amount validation
-  const isLoanAmountValid = (): boolean => {
-    if (!loanAmount || loanAmount === '0') return false;
-    
-    const maxAmount = parseFloat(calculateMaxLoanAmount());
-    const requestedAmount = parseFloat(loanAmount);
-    
-    return requestedAmount > 0 && requestedAmount <= maxAmount;
-  };
+  if (rentalError || !details) {
+    return (
+      <Card className="max-w-md mx-auto mt-8">
+        <CardHeader>
+          <CardTitle>Error</CardTitle>
+          <CardDescription>Failed to load rental agreement details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive" className="mb-4">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{rentalError || "Could not load rental details"}</AlertDescription>
+          </Alert>
+          <Button asChild variant="outline" className="w-full">
+            <a href={`/rental/${address}`}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Rental Agreement
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+  
+  const maxLoanAmount = calculateMaxLoanAmount();
+  const remainingDuration = calculateRemainingDuration();
   
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/loan/request')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Loan Requests
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/rental/${address}`)}>
+          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Rental Details
         </Button>
       </div>
       
       <div>
-      <h1 className="text-3xl font-bold">Create Loan Request</h1>
-        <p className="text-muted-foreground mt-1">Request funding using your rental property as collateral</p>
+        <h1 className="text-3xl font-bold tracking-tight">Create Loan Request</h1>
+        <p className="text-muted-foreground mt-2">
+          Request a loan using your rental agreement security deposit as collateral
+        </p>
       </div>
       
-      {loadingProperties ? (
-        <div className="flex flex-col items-center justify-center h-60">
-          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-          <p className="text-muted-foreground">Loading your rental properties...</p>
-        </div>
-      ) : rentalProperties.length === 0 ? (
-        <Alert>
-          <AlertTitle>No active rental properties found</AlertTitle>
-          <AlertDescription>
-            You need an active rental agreement to create a loan request.
-            <div className="mt-4">
-              <Button onClick={() => navigate('/rental/create')}>
-                Create Rental Agreement
-              </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Rental Agreement Details</CardTitle>
+            <CardDescription>Information about your rental agreement</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-muted-foreground">Contract Address</Label>
+                <p className="text-sm font-medium mt-1">{formatAddress(address || '')}</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Monthly Rent</Label>
+                <p className="text-sm font-medium mt-1">{details?.rentAmount} ETH</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Current Due Amount</Label>
+                <p className="text-sm font-medium mt-1">{loanAmount} ETH</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Security Deposit</Label>
+                <p className="text-sm font-medium mt-1">{details?.currentSecurityDeposit} ETH</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Possible Loan Duration</Label>
+                <p className="text-sm font-medium mt-1">{calculateRemainingDuration()} months</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Max Loan Amount</Label>
+                <p className="text-sm font-medium mt-1">{calculateMaxLoanAmount()} ETH</p>
+              </div>
+              <div>
+                <Label className="text-muted-foreground">Possible Collateral</Label>
+                <p className="text-sm font-medium mt-1">{calculateMaxLoanAmount()} ETH</p>
+              </div>
             </div>
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-8">
+            
+            {/* Show warning if security deposit is insufficient */}
+            {!isSecurityDepositSufficient() && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertTitle>Insufficient Security Deposit</AlertTitle>
+                <AlertDescription>
+                  Your current security deposit is less than the maximum loan amount. 
+                  You can only request a loan up to your current security deposit amount.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {/* Show warning if no remaining duration for loan */}
+            {calculateRemainingDuration() <= 0 && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertTitle>No Available Duration</AlertTitle>
+                <AlertDescription>
+                  You cannot take a loan because there's not enough remaining time on your rental agreement.
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        <form onSubmit={handleSubmit}>
           <Card>
             <CardHeader>
-              <CardTitle>Collateral Selection</CardTitle>
-              <CardDescription>Select a rental property to use as collateral</CardDescription>
+              <CardTitle>Loan Request</CardTitle>
+              <CardDescription>Enter your loan request details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Loan Amount */}
               <div className="space-y-2">
-                <Label htmlFor="property">Rental Property</Label>
-                <Select
-                  value={selectedProperty}
-                  onValueChange={setSelectedProperty}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a rental property" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rentalProperties.map(property => (
-                      <SelectItem key={property.address} value={property.address}>
-                        {property.propertyAddress} ({formatAddress(property.address)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="loan-amount" className="flex items-center gap-1">
+                  <DollarSign className="h-4 w-4" /> Loan Amount (ETH)
+                </Label>
+                <Input
+                  id="loan-amount"
+                  type="text"
+                  value={loanAmount}
+                  onChange={handleLoanAmountChange}
+                  className={parseFloat(loanAmount) > parseFloat(maxLoanAmount) ? "border-red-500" : ""}
+                />
+                {parseFloat(loanAmount) > parseFloat(maxLoanAmount) && (
+                  <p className="text-xs text-red-500">
+                    Amount cannot exceed the maximum loan amount ({maxLoanAmount} ETH)
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Maximum loan amount is equal to your current due amount.
+                </p>
               </div>
               
-              {selectedPropertyDetails && (
-                <div className="rounded-lg bg-muted p-4 mt-4">
-                  <div className="flex items-center mb-3">
-                    <Home className="h-4 w-4 mr-2 text-muted-foreground" />
-                    <h3 className="font-medium">Selected Property Details</h3>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Property:</span>
-                      <span className="font-medium">{selectedPropertyDetails.propertyAddress}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Contract:</span>
-                      <span className="font-mono text-sm">{formatAddress(selectedPropertyDetails.contractAddress)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Monthly Rent:</span>
-                      <span className="font-medium">{selectedPropertyDetails.rentAmount} ETH</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Rental Duration:</span>
-                      <span className="font-medium">{selectedPropertyDetails.rentDuration} months</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Max Loan Amount:</span>
-                      <span className="font-medium">{calculateMaxLoanAmount()} ETH</span>
-                    </div>
-                  </div>
+              {/* Loan Duration */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="loan-duration" className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" /> Loan Duration
+                  </Label>
+                  <span className="font-medium">{remainingDuration} months</span>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Loan Parameters</CardTitle>
-              <CardDescription>Set the terms for your loan request</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="loan-amount" className="flex items-center">
-                      <DollarSign className="h-4 w-4 mr-1" /> Loan Amount
-                    </Label>
-                    {!isLoanAmountValid() && loanAmount !== '' && (
-                      <span className="text-sm text-destructive">
-                        Amount must be &lt;= {calculateMaxLoanAmount()} ETH
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Input
-                      id="loan-amount"
-                      type="text"
-                      placeholder="0.0"
-                      value={loanAmount}
-                      onChange={handleLoanAmountChange}
-                      className={!isLoanAmountValid() && loanAmount !== '' ? "border-destructive" : ""}
-                    />
-                    <span className="font-medium">ETH</span>
-                  </div>
+                <Slider
+                  id="loan-duration"
+                  defaultValue={[loanDuration]}
+                  min={1}
+                  max={remainingDuration}
+                  step={1}
+                  onValueChange={handleLoanDurationChange}
+                  className="my-4"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>1 month</span>
+                  <span>{remainingDuration} months</span>
                 </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="loan-duration" className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-1" /> Loan Duration
-                    </Label>
-                    <span className="font-medium">{loanDuration} months</span>
-                  </div>
-                  <Slider
-                    id="loan-duration"
-                    defaultValue={[loanDuration]}
-                    min={3}
-                    max={36}
-                    step={3}
-                    onValueChange={handleLoanDurationChange}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>3 months</span>
-                    <span>36 months</span>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="interest-rate" className="flex items-center">
-                      <Percent className="h-4 w-4 mr-1" /> Preferred Interest Rate
-                    </Label>
-                    <span className="font-medium">{interestRate}%</span>
-                  </div>
-                  <Slider
-                    id="interest-rate"
-                    defaultValue={[interestRate]}
-                    min={1}
-                    max={15}
-                    step={0.5}
-                    onValueChange={handleInterestRateChange}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>1%</span>
-                    <span>15%</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    This is your preferred rate. Lenders may offer different rates.
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="grace-months" className="flex items-center">
-                      <Shield className="h-4 w-4 mr-1" /> Grace Periods
-                    </Label>
-                    <span className="font-medium">{graceMonths} month{graceMonths !== 1 ? 's' : ''}</span>
-                  </div>
-                  <Slider
-                    id="grace-months"
-                    defaultValue={[graceMonths]}
-                    min={0}
-                    max={3}
-                    step={1}
-                    onValueChange={handleGraceMonthsChange}
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>0 months</span>
-                    <span>3 months</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Grace periods allow you to skip payments when needed without defaulting.
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground">
+                  Loan duration cannot exceed the remaining rental period ({remainingDuration} months).
+                </p>
               </div>
               
-              <Separator />
-              
-              <div className="space-y-4">
-                <div className="flex items-center mb-2">
-                  <Calculator className="h-5 w-5 mr-2 text-muted-foreground" />
-                  <h3 className="font-medium">Estimated Loan Details</h3>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="rounded-md bg-muted p-3">
-                    <Label className="text-xs text-muted-foreground">Monthly Payment</Label>
-                    <p className="font-medium">{calculateMonthlyPayment()} ETH</p>
-                  </div>
-                  <div className="rounded-md bg-muted p-3">
-                    <Label className="text-xs text-muted-foreground">Total Repayment</Label>
-                    <p className="font-medium">{calculateTotalRepayment()} ETH</p>
-                  </div>
-                  <div className="rounded-md bg-muted p-3">
-                    <Label className="text-xs text-muted-foreground">Total Interest</Label>
-                    <p className="font-medium">{calculateTotalInterest()} ETH</p>
-                  </div>
-                  <div className="rounded-md bg-muted p-3">
-                    <Label className="text-xs text-muted-foreground">APR</Label>
-                    <p className="font-medium">{interestRate.toFixed(2)}%</p>
-                  </div>
-                </div>
+              {/* Preferred Interest Rate */}
+              <div className="space-y-2">
+                <Label htmlFor="interest-rate" className="flex items-center gap-1">
+                  <Percent className="h-4 w-4" /> Preferred Interest Rate (%)
+                </Label>
+                <Input
+                  id="interest-rate"
+                  type="text"
+                  value={interestRate.toString()}
+                  onChange={handleInterestRateChange}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Minimum interest rate is 1%. Lenders may offer different rates.
+                </p>
               </div>
             </CardContent>
-          </Card>
-          
-          {error && (
-            <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          
-          <div className="flex justify-end">
-            <Button 
-              type="submit" 
-              disabled={creatingRequest || !isFormValid()}
-              className="w-full md:w-auto"
-            >
-              {creatingRequest ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 
-                  Creating Request...
-                </>
-              ) : (
-                <>Create Loan Request</>
+            <CardFooter className="flex flex-col gap-4">
+              <Button type="submit" className="w-full" disabled={!isFormValid() || creatingRequest}>
+                {creatingRequest ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Request...
+                  </>
+                ) : (
+                  "Create Loan Request"
+                )}
+              </Button>
+              
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
               )}
-            </Button>
-          </div>
+            </CardFooter>
+          </Card>
         </form>
-      )}
+      </div>
     </div>
   );
 };

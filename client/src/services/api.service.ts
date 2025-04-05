@@ -1,7 +1,28 @@
 import { User as FirebaseUser } from 'firebase/auth';
 import { User as AppUser } from '../types/user.types';
+import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+// Set API base URL based on environment
+const baseURL = process.env.REACT_APP_API_URL || API_URL;
+
+// Create axios instance
+const api = axios.create({
+  baseURL,
+  headers: {
+    'Content-Type': 'application/json',
+  }
+});
+
+// Add authorization header to requests when user is provided
+const getAuthHeader = (user: AppUser) => {
+  return {
+    headers: {
+      'Authorization': `Bearer ${user.token}`
+    }
+  };
+};
 
 // Helper to get auth token
 async function getAuthToken(user: FirebaseUser | null): Promise<string | null> {
@@ -163,90 +184,147 @@ export const RentalApi = {
 
 // Loan related API calls
 export const LoanApi = {
-  // Create loan request
-  async createLoanRequest(user: FirebaseUser | AppUser | null, data: {
+  // Create a new loan request
+  createLoanRequest: async (user: AppUser, data: {
     rentalAgreementAddress: string;
     requestedAmount: string;
     loanDuration: number;
-    maxInterestRate: number;
-  }) {
-    return apiCall('/api/loan/request', 'POST', user, {
-      rentalAgreementAddress: data.rentalAgreementAddress,
-      amount: data.requestedAmount,
-      duration: data.loanDuration
-    });
-  },
-  
-  // Get all loan requests
-  async getLoanRequests(user: FirebaseUser | AppUser | null) {
-    return apiCall('/api/loan/requests', 'GET', user);
-  },
-  
-  // Get a specific loan request
-  async getLoanRequest(user: FirebaseUser | AppUser | null, id: string) {
-    return apiCall(`/api/loan/requests/${id}`, 'GET', user);
-  },
-  
-  // Create loan offer
-  async createLoanOffer(user: FirebaseUser | AppUser | null, data: {
-    loanRequestId: string;
-    offerAmount: string;
     interestRate: number;
-    loanDuration: number;
-    graceMonths: number;
-  }) {
-    return apiCall('/api/loan/offer', 'POST', user, {
-      loanRequestId: data.loanRequestId,
-      interestRate: data.interestRate,
-      expirationDays: 7 // Add an appropriate expiration period
-    });
+  }) => {
+    try {
+      const response = await api.post(
+        '/api/loan/request', 
+        data, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error creating loan request:', error);
+      throw error;
+    }
   },
-  
-  // Get all loan offers for a request
-  async getLoanOffers(user: FirebaseUser | AppUser | null, requestId: string) {
-    // Include this with the request details route since there's no dedicated endpoint
-    const response = await apiCall(`/api/loan/requests/${requestId}`, 'GET', user);
-    return response.loanOffers;
+
+  // Get all loan requests for a user
+  getLoanRequests: async (user: AppUser) => {
+    try {
+      const response = await api.get(
+        '/api/loan/requests', 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching loan requests:', error);
+      throw error;
+    }
   },
-  
+
+  // Get a single loan request by ID
+  getLoanRequest: async (user: AppUser, requestId: string) => {
+    try {
+      const response = await api.get(
+        `/api/loan/request/${requestId}`, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching loan request:', error);
+      throw error;
+    }
+  },
+
+  // Create a loan offer for a request
+  createLoanOffer: async (user: AppUser, data: {
+    requestId: string;
+    interestRate: number;
+    offerAmount: string;
+  }) => {
+    try {
+      const response = await api.post(
+        '/api/loan/offer', 
+        data, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error creating loan offer:', error);
+      throw error;
+    }
+  },
+
   // Accept a loan offer
-  async acceptLoanOffer(user: FirebaseUser | AppUser | null, offerId: string) {
-    return apiCall(`/api/loan/offer/${offerId}/accept`, 'POST', user);
+  acceptLoanOffer: async (user: AppUser, offerId: string) => {
+    try {
+      const response = await api.post(
+        `/api/loan/offer/${offerId}/accept`, 
+        {}, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error accepting loan offer:', error);
+      throw error;
+    }
+  },
+
+  // Get all loan agreements for a user
+  getLoanAgreements: async (user: AppUser) => {
+    try {
+      const response = await api.get(
+        '/api/loan/agreements', 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching loan agreements:', error);
+      throw error;
+    }
+  },
+
+  // Get a single loan agreement by ID
+  getLoanAgreement: async (user: AppUser, agreementId: string) => {
+    try {
+      const response = await api.get(
+        `/api/loan/agreement/${agreementId}`, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching loan agreement:', error);
+      throw error;
+    }
   },
   
-  // Create loan agreement on blockchain
-  // Note: This is handled automatically by the server when accepting an offer
-  async createLoanAgreement(user: FirebaseUser | AppUser | null, data: {
-    loanOfferId: string;
-    contractAddress: string;
-    transactionHash: string;
-  }) {
-    return apiCall('/api/loan/create', 'POST', user, data);
+  // Initialize a loan (for lender)
+  initializeLoan: async (user: AppUser, contractAddress: string, transactionHash: string) => {
+    try {
+      const response = await api.post(
+        `/api/loan/agreement/${contractAddress}/initialize`, 
+        { transactionHash }, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error initializing loan:', error);
+      throw error;
+    }
   },
   
-  // Get all loan agreements
-  async getLoanAgreements(user: FirebaseUser | AppUser | null) {
-    return apiCall('/api/loan/agreements', 'GET', user);
-  },
-  
-  // Get a specific loan agreement
-  async getLoanAgreement(user: FirebaseUser | AppUser | null, address: string) {
-    return apiCall(`/api/loan/agreement/${address}`, 'GET', user);
-  },
-  
-  // Initialize loan (as lender)
-  async initializeLoan(user: FirebaseUser | AppUser | null, address: string, transactionHash: string) {
-    return apiCall(`/api/loan/agreement/${address}/initialize`, 'POST', user, { 
-      transactionHash 
-    });
-  },
-  
-  // Make loan repayment (as borrower)
-  async makeRepayment(user: FirebaseUser | AppUser | null, address: string, month: number, amount: string, transactionHash: string) {
-    return apiCall(`/api/loan/agreement/${address}/repay`, 'POST', user, { 
-      month, 
-      amount, 
-      transactionHash 
-    });
+  // Make a loan repayment (for borrower)
+  makeRepayment: async (user: AppUser, contractAddress: string, month: number, amount: string, transactionHash: string) => {
+    try {
+      const response = await api.post(
+        `/api/loan/agreement/${contractAddress}/repay`, 
+        { 
+          month, 
+          amount, 
+          transactionHash 
+        }, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error making loan repayment:', error);
+      throw error;
+    }
   }
 }; 

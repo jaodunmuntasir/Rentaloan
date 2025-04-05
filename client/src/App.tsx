@@ -7,18 +7,13 @@ import { AuthProvider } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { ContractProvider } from './contexts/ContractContext';
 
-// Pages - to be created later
+// Pages
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import RentalCreate from './pages/rental/Create';
 import RentalList from './pages/rental/List';
 import RentalDetail from './pages/rental/Detail';
-import LoanRequestCreate from './pages/loan/RequestCreate';
-import LoanRequestList from './pages/loan/RequestList';
-import LoanRequestDetail from './pages/loan/RequestDetail';
-import LoanAgreementList from './pages/loan/AgreementList';
-import LoanAgreementDetail from './pages/loan/AgreementDetail';
 import ProfilePage from './pages/Profile';
 import NotFound from './pages/NotFound';
 import Layout from './components/Layout';
@@ -29,6 +24,7 @@ import RequestList from './pages/loan/RequestList';
 import RequestCreate from './pages/loan/RequestCreate';
 import AgreementList from './pages/loan/AgreementList';
 import AgreementDetail from './pages/loan/AgreementDetail';
+import MyRequestsPage from './pages/loan/MyRequests';
 
 // Inline PrivateRoute component
 const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -76,6 +72,7 @@ function App() {
                   <Route index element={<RentalList />} />
                   <Route path="create" element={<RentalCreate />} />
                   <Route path=":address" element={<RentalDetail />} />
+                  <Route path=":address/loan/request/create" element={<RequestCreate />} />
                 </Route>
                 
                 {/* Loan routes */}
@@ -84,6 +81,7 @@ function App() {
                   <Route path="agreements" element={<AgreementList />} />
                   <Route path="agreement/:address" element={<AgreementDetail />} />
                   <Route path="requests" element={<RequestList />} />
+                  <Route path="myrequests" element={<MyRequestsPage />} />
                   <Route path="request/create" element={<RequestCreate />} />
                   <Route path="request/:address" element={<RequestDetail />} />
                 </Route>
