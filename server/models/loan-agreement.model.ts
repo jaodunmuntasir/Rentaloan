@@ -39,7 +39,7 @@ export class LoanAgreement extends Model {
   @ForeignKey(() => LoanOffer)
   @Column({
     type: DataType.INTEGER,
-    allowNull: false
+    allowNull: true
   })
   loanOfferId!: number;
 
@@ -49,7 +49,7 @@ export class LoanAgreement extends Model {
   @ForeignKey(() => RentalAgreement)
   @Column({
     type: DataType.INTEGER,
-    allowNull: false
+    allowNull: true
   })
   rentalAgreementId!: number;
 

@@ -112,12 +112,13 @@ export const UserApi = {
 export const RentalApi = {
   // Create rental agreement
   async createRental(user: FirebaseUser | AppUser | null, data: {
-    contractAddress?: string;
+    contractAddress: string;
     renterEmail: string;
     duration: number;
     securityDeposit: string;
     baseRent: string;
     name: string;
+    transactionHash?: string;
   }) {
     // Use the existing endpoint whether the contract exists or not
     return apiCall('/api/rental/create', 'POST', user, data);

@@ -26,11 +26,18 @@ const SkipRent: React.FC<SkipRentProps> = ({
   
   // Handle skip rent action
   const handleSkipRent = async () => {
-    if (!rentalContractAddress) return;
+    if (!rentalContractAddress || !rentalDetails) return;
     
     try {
       setIsProcessing(true);
-      const receipt = await skipRent();
+      
+      // Determine which month to skip based on lastPaidMonth
+      // If lastPaidMonth is undefined, default to month 1
+      const lastPaidMonth = rentalDetails.lastPaidMonth ?? 0;
+      const monthToSkip = lastPaidMonth + 1;
+      
+      console.log(`Skipping rent for month ${monthToSkip}`);
+      const receipt = await skipRent(monthToSkip);
       
       if (receipt && onSuccess) {
         onSuccess();

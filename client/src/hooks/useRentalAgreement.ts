@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ethers, Contract } from 'ethers';
 import { useContracts } from '../contexts/ContractContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
-import { RentalApi } from '../services/api.service';
+import { RentalAgreementApi as RentalApi } from '../services/rental.service';
 
 interface RentalAgreementDetails {
   landlord: string;
@@ -18,6 +18,8 @@ interface RentalAgreementDetails {
   isActive: boolean;
   securityDepositPaid: boolean;
   currentRentPaid: boolean;
+  currentMonth?: number;
+  lastPaidMonth?: number;
 }
 
 export function useRentalAgreement(contractAddress?: string) {
@@ -68,45 +70,141 @@ export function useRentalAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Initialize contract if not already done
+      // Fetch rental details from API first
+      if (currentUser) {
+        try {
+          const apiResponse = await RentalApi.getRentalAgreementDetails(currentUser, contractAddress);
+          
+          if (apiResponse && apiResponse.success) {
+            const { agreement } = apiResponse;
+            
+            // Extract blockchain data if available, otherwise use database data
+            const onChain = agreement.onChain || {};
+            
+            // Convert to RentalAgreementDetails format
+            const landlordAddress = onChain.landlord || agreement.landlord?.walletAddress || '';
+            const tenantAddress = onChain.renter || agreement.renter?.walletAddress || '';
+            
+            setDetails({
+              landlord: landlordAddress,
+              tenant: tenantAddress,
+              propertyAddress: 'Property Address', // Placeholder
+              propertyNftId: '0', // Placeholder
+              rentAmount: onChain.baseRent || agreement.baseRent || '0',
+              securityDeposit: onChain.securityDeposit || agreement.securityDeposit || '0',
+              rentDuration: onChain.duration || agreement.duration || 0,
+              paymentInterval: 30, // Default to monthly
+              nextPaymentDate: new Date(), // Placeholder
+              isActive: onChain.status === 1 || agreement.status === 'ACTIVE',
+              securityDepositPaid: onChain.status !== 0,
+              currentRentPaid: false, // Placeholder
+              currentMonth: onChain.lastPaidMonth || 0,
+              lastPaidMonth: onChain.lastPaidMonth || 0
+            });
+            
+            return;
+          }
+        } catch (apiError) {
+          console.error("API error, falling back to blockchain:", apiError);
+          // Continue with blockchain call if API fails
+        }
+      }
+      
+      // Fallback to blockchain if API fails or user not logged in
       const contract = rentalContract || await initialize(contractAddress);
       if (!contract) return;
       
-      // Get contract data from blockchain
-      const landlord = await contract.landlord();
-      const tenant = await contract.tenant();
-      const propertyAddress = await contract.propertyAddress();
-      const propertyNftId = await contract.propertyNftId();
-      const rentAmount = ethers.formatEther(await contract.rentAmount());
-      const securityDeposit = ethers.formatEther(await contract.securityDeposit());
-      const rentDuration = Number(await contract.rentDuration());
-      const paymentInterval = Number(await contract.paymentInterval());
-      const nextPaymentTimestamp = Number(await contract.nextPaymentDate()) * 1000; // Convert to milliseconds
-      const nextPaymentDate = new Date(nextPaymentTimestamp);
-      const isActive = await contract.isActive();
-      const securityDepositPaid = await contract.securityDepositPaid();
-      const currentRentPaid = await contract.currentRentPaid();
-      
-      setDetails({
-        landlord,
-        tenant,
-        propertyAddress,
-        propertyNftId,
-        rentAmount,
-        securityDeposit,
-        rentDuration,
-        paymentInterval,
-        nextPaymentDate,
-        isActive,
-        securityDepositPaid,
-        currentRentPaid
-      });
+      try {
+        // Use getContractDetails() to get all data in one call
+        const details = await contract.getContractDetails();
+        
+        // Extract values from the returned tuple
+        const landlord = details[0];
+        const renter = details[1];
+        const rentDuration = Number(details[2]);
+        const securityDepositWei = details[3];
+        const baseRentWei = details[4];
+        const gracePeriodValue = Number(details[5]);
+        const statusValue = Number(details[6]);
+        const currentSecurityDeposit = details[7];
+        const lastPaidMonth = Number(details[8]);
+        const dueAmount = details[9];
+        
+        // Format eth values
+        const securityDeposit = ethers.formatEther(securityDepositWei);
+        const rentAmount = ethers.formatEther(baseRentWei);
+        
+        // Default values for properties not in contract
+        const propertyAddress = 'Property Address'; // Placeholder
+        const propertyNftId = '0'; // Placeholder
+        const paymentInterval = 30; // Monthly (30 days)
+        
+        // Determine status values
+        const isActive = statusValue === 1; // ACTIVE is 1
+        const securityDepositPaid = statusValue !== 0; // Not INITIALIZED (0)
+        
+        // Calculate next payment date based on last paid month
+        const nextPaymentDate = new Date();
+        if (lastPaidMonth >= 0) {
+          nextPaymentDate.setTime(
+            new Date().getTime() + ((lastPaidMonth + 1) * 30 * 24 * 60 * 60 * 1000)
+          );
+        }
+        
+        setDetails({
+          landlord,
+          tenant: renter,
+          propertyAddress,
+          propertyNftId,
+          rentAmount,
+          securityDeposit,
+          rentDuration,
+          paymentInterval,
+          nextPaymentDate,
+          isActive,
+          securityDepositPaid,
+          currentRentPaid: lastPaidMonth > 0,
+          currentMonth: lastPaidMonth,
+          lastPaidMonth
+        });
+      } catch (contractErr) {
+        console.error("Error fetching contract details:", contractErr);
+        
+        // If getContractDetails fails, try individual property calls as fallback
+        try {
+          const landlord = await contract.landlord();
+          const renter = await contract.renter();
+          const rentDuration = Number(await contract.rentalDuration());
+          const securityDeposit = ethers.formatEther(await contract.securityDeposit());
+          const baseRent = ethers.formatEther(await contract.getBaseRent());
+          const status = Number(await contract.getContractStatus());
+          
+          setDetails({
+            landlord,
+            tenant: renter,
+            propertyAddress: 'Property Address', // Placeholder
+            propertyNftId: '0', // Placeholder
+            rentAmount: baseRent,
+            securityDeposit,
+            rentDuration,
+            paymentInterval: 30, // Default to monthly
+            nextPaymentDate: new Date(), // Placeholder
+            isActive: status === 1, // ACTIVE status
+            securityDepositPaid: status !== 0, // Not INITIALIZED
+            currentRentPaid: false, // Placeholder
+            currentMonth: 0,
+            lastPaidMonth: 0
+          });
+        } catch (err) {
+          setError("Failed to read contract data: " + (err instanceof Error ? err.message : String(err)));
+        }
+      }
     } catch (err: any) {
       setError(err.message || "Error loading rental details");
     } finally {
       setLoading(false);
     }
-  }, [contractAddress, initialize, rentalContract]);
+  }, [contractAddress, initialize, rentalContract, currentUser]);
   
   // Pay security deposit
   const paySecurityDeposit = useCallback(async () => {
@@ -119,16 +217,19 @@ export function useRentalAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Get security deposit amount
+      // Get security deposit amount - must match the exact contract property name
       const depositAmount = await rentalContract.securityDeposit();
+      console.log("Security deposit amount:", depositAmount.toString());
       
-      // Send transaction
-      const tx = await rentalContract.paySecurityDeposit({
-        value: depositAmount
+      // Send transaction with the security deposit amount as value
+      const tx = await rentalContract.paySecurityDeposit({ 
+        value: depositAmount 
       });
+      console.log("Transaction submitted:", tx.hash);
       
       // Wait for transaction to be mined
       const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
       
       // Update backend
       if (currentUser) {
@@ -144,6 +245,7 @@ export function useRentalAgreement(contractAddress?: string) {
       
       return receipt;
     } catch (err: any) {
+      console.error("Security deposit payment error:", err);
       setError(err.message || "Error paying security deposit");
       return null;
     } finally {
@@ -152,7 +254,7 @@ export function useRentalAgreement(contractAddress?: string) {
   }, [contractAddress, rentalContract, isConnected, loadDetails, currentUser]);
   
   // Pay rent
-  const payRent = useCallback(async () => {
+  const payRent = useCallback(async (month: number) => {
     if (!contractAddress || !rentalContract || !isConnected) {
       setError("Contract not initialized or wallet not connected");
       return null;
@@ -162,23 +264,29 @@ export function useRentalAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Get rent amount
-      const rentAmount = await rentalContract.rentAmount();
+      // Get rent amount and any due amount
+      const baseRent = await rentalContract.getBaseRent();
+      const dueAmount = await rentalContract.dueAmount();
+      const totalAmount = baseRent.add(dueAmount);
       
-      // Send transaction
-      const tx = await rentalContract.payRent({
-        value: rentAmount
+      console.log(`Paying rent for month ${month}, amount: ${ethers.formatEther(totalAmount)} ETH`);
+      
+      // Use PaymentMethod.WALLET (0) for direct payment
+      const tx = await rentalContract.payRent(month, 0, { 
+        value: totalAmount
       });
+      console.log("Transaction submitted:", tx.hash);
       
       // Wait for transaction to be mined
       const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
       
       // Update backend
       if (currentUser) {
         await RentalApi.payRent(
           currentUser,
           contractAddress,
-          ethers.formatEther(rentAmount),
+          ethers.formatEther(totalAmount),
           receipt.hash
         );
       }
@@ -188,6 +296,7 @@ export function useRentalAgreement(contractAddress?: string) {
       
       return receipt;
     } catch (err: any) {
+      console.error("Rent payment error:", err);
       setError(err.message || "Error paying rent");
       return null;
     } finally {
@@ -195,8 +304,8 @@ export function useRentalAgreement(contractAddress?: string) {
     }
   }, [contractAddress, rentalContract, isConnected, loadDetails, currentUser]);
   
-  // Skip rent payment (for landlord)
-  const skipRent = useCallback(async () => {
+  // Skip rent payment 
+  const skipRent = useCallback(async (month: number) => {
     if (!contractAddress || !rentalContract || !isConnected) {
       setError("Contract not initialized or wallet not connected");
       return null;
@@ -206,11 +315,15 @@ export function useRentalAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Send transaction
-      const tx = await rentalContract.skipRentPayment();
+      console.log(`Skipping rent for month ${month}`);
+      
+      // Send transaction to skip rent for the specified month
+      const tx = await rentalContract.skipRentPayment(month);
+      console.log("Transaction submitted:", tx.hash);
       
       // Wait for transaction to be mined
       const receipt = await tx.wait();
+      console.log("Transaction confirmed:", receipt);
       
       // Update backend
       if (currentUser) {
@@ -225,6 +338,7 @@ export function useRentalAgreement(contractAddress?: string) {
       
       return receipt;
     } catch (err: any) {
+      console.error("Skip rent error:", err);
       setError(err.message || "Error skipping rent");
       return null;
     } finally {
@@ -271,12 +385,25 @@ export function useRentalAgreement(contractAddress?: string) {
     }
   }, [contractAddress, rentalContract, isConnected, loadDetails, currentUser]);
   
-  // Initialize when address is provided
-  useCallback(() => {
-    if (contractAddress && !rentalContract) {
-      initialize(contractAddress);
+  // Initialize and load details when address is provided
+  useEffect(() => {
+    if (contractAddress) {
+      const initAndLoad = async () => {
+        try {
+          // Initialize the contract if needed
+          if (!rentalContract) {
+            await initialize(contractAddress);
+          }
+          // Load the details
+          await loadDetails();
+        } catch (err) {
+          console.error("Error initializing rental agreement:", err);
+        }
+      };
+      
+      initAndLoad();
     }
-  }, [contractAddress, rentalContract, initialize]);
+  }, [contractAddress, rentalContract, initialize, loadDetails]);
   
   return {
     rentalContract,

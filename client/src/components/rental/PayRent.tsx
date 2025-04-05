@@ -22,11 +22,18 @@ const PayRent: React.FC<PayRentProps> = ({
   
   // Handle rent payment
   const handlePayRent = async () => {
-    if (!contractAddress) return;
+    if (!contractAddress || !details) return;
     
     try {
       setIsProcessing(true);
-      const receipt = await payRent();
+      
+      // Get the next month to pay based on lastPaidMonth
+      // If lastPaidMonth is undefined, default to month 1
+      const lastPaidMonth = details.lastPaidMonth ?? 0;
+      const nextMonthToPay = lastPaidMonth + 1;
+      
+      console.log(`Paying rent for month ${nextMonthToPay}`);
+      const receipt = await payRent(nextMonthToPay);
       
       if (receipt && onSuccess) {
         onSuccess();

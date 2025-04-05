@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import authRoutes from './routes/auth';
@@ -6,7 +6,7 @@ import rentalRoutes from './routes/rental';
 import loanRoutes from './routes/loan';
 import userRoutes from './routes/user';
 import sequelize from './models';
-import eventService from './services/event.service';
+// import eventService from './services/event.service';
 
 const app = express();
 
@@ -39,14 +39,14 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Initialize database and start server
-sequelize.sync({ alter: true })
+sequelize.sync()
   .then(() => {
-    console.log('Database synchronized and updated if needed');
+    console.log('Database synchronized');
     // Initialize the event service after database is synchronized
-    eventService.initEventService();
+    // eventService.initEventService();
     
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);

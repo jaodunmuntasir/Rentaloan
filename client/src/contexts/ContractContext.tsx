@@ -26,7 +26,7 @@ interface ContractContextType {
     baseRent: string,
     gracePeriod: number,
     name: string
-  ) => Promise<string | null>;
+  ) => Promise<{ contractAddress: string, transactionHash: string } | null>;
   createLoanAgreement: (params: CreateLoanParams) => Promise<string | null>;
 }
 
@@ -127,7 +127,7 @@ export const ContractProvider: React.FC<{children: React.ReactNode}> = ({ childr
     baseRent: string,
     gracePeriod: number,
     name: string
-  ): Promise<string | null> => {
+  ): Promise<{ contractAddress: string, transactionHash: string } | null> => {
     if (!rentalFactory || !signer) return null;
 
     try {
@@ -172,8 +172,8 @@ export const ContractProvider: React.FC<{children: React.ReactNode}> = ({ childr
       const receipt = await tx.wait();
       console.log("Transaction receipt:", receipt);
       
-      // Return the simulated contract address
-      return contractAddress;
+      // Return the simulated contract address and transaction hash
+      return { contractAddress, transactionHash: tx.hash };
     } catch (error) {
       console.error('Error creating rental agreement:', error);
       throw new Error('Failed to create rental agreement on the blockchain');

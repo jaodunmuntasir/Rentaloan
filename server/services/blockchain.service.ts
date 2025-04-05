@@ -660,7 +660,7 @@ export const verifyLoanRepayment = async (
   }
 };
 
-// Initialize the blockchain service when imported
+// Initialize the blockchain service
 initBlockchain();
 
 export default {
@@ -670,11 +670,6 @@ export default {
   skipRent,
   extendRentalAgreement,
   getRentalAgreementDetails,
-  
-  // Loan functions
-  createLoanAgreement,
-  initializeLoan,
-  makeRepayment,
   getLoanAgreementDetails,
   getRepaymentSchedule,
   getAvailableCollateral,

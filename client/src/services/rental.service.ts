@@ -42,5 +42,48 @@ export const RentalAgreementApi = {
     data: Partial<RentalAgreement>
   ) {
     return apiCall<RentalAgreement>(`/api/rental/${id}`, 'PUT', user, data);
+  },
+  
+  // Pay security deposit
+  async paySecurityDeposit(
+    user: FirebaseUser | AppUser | null,
+    address: string,
+    transactionHash: string
+  ) {
+    return apiCall(`/api/rental/${address}/pay-deposit`, 'POST', user, { transactionHash });
+  },
+  
+  // Pay rent
+  async payRent(
+    user: FirebaseUser | AppUser | null,
+    address: string,
+    amount: string,
+    transactionHash: string
+  ) {
+    return apiCall(`/api/rental/${address}/pay-rent`, 'POST', user, { 
+      amount, 
+      transactionHash 
+    });
+  },
+  
+  // Skip rent payment
+  async skipRent(
+    user: FirebaseUser | AppUser | null,
+    address: string
+  ) {
+    return apiCall(`/api/rental/${address}/skip-rent`, 'POST', user);
+  },
+  
+  // Extend rental agreement
+  async extendRental(
+    user: FirebaseUser | AppUser | null,
+    address: string,
+    additionalMonths: number,
+    transactionHash: string
+  ) {
+    return apiCall(`/api/rental/${address}/extend`, 'POST', user, { 
+      additionalMonths, 
+      transactionHash 
+    });
   }
 }; 

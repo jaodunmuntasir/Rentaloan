@@ -175,7 +175,7 @@ const RentalCreate: React.FC = () => {
         name: formData.name
       });
 
-      const contractAddress = await createRentalAgreement(
+      const tx = await createRentalAgreement(
         tenant.walletAddress,
         formData.duration,
         formData.securityDeposit,
@@ -184,29 +184,31 @@ const RentalCreate: React.FC = () => {
         formData.name
       );
 
-      if (!contractAddress) {
+      if (!tx || !tx.contractAddress || !tx.transactionHash) {
         throw new Error('Failed to create rental agreement on the blockchain');
       }
 
-      console.log("Contract successfully created at address:", contractAddress);
+      console.log("Contract successfully created at address:", tx.contractAddress);
 
       // Step 2: Store contract data in the database
       console.log("Storing contract in database:", {
-        contractAddress,
+        contractAddress: tx.contractAddress,
         renterEmail: tenant.email,
         duration: formData.duration,
         securityDeposit: formData.securityDeposit,
         baseRent: formData.baseRent,
-        name: formData.name
+        name: formData.name,
+        transactionHash: tx.transactionHash
       });
       
       const rentalData = {
-        contractAddress,
+        contractAddress: tx.contractAddress,
         renterEmail: tenant.email,
         duration: parseInt(formData.duration.toString()),
         securityDeposit: formData.securityDeposit,
         baseRent: formData.baseRent,
-        name: formData.name
+        name: formData.name,
+        transactionHash: tx.transactionHash
       };
       
       try {
@@ -222,12 +224,12 @@ const RentalCreate: React.FC = () => {
         showToast('Rental agreement created successfully!', 'success');
         
         // Navigate to the rental details page
-        navigate(`/rental/${contractAddress}`);
+        navigate(`/rental/${tx.contractAddress}`);
       } catch (dbError) {
         console.error('Error saving to database:', dbError);
         // Even if the database save fails, we should show that the contract was created
-        showToast('Contract was created on blockchain, but database storage failed. Contract address: ' + contractAddress, 'warning');
-        setGeneralError('Contract was created on blockchain, but failed to save to the database. You can find your contract at address: ' + contractAddress);
+        showToast('Contract was created on blockchain, but database storage failed. Contract address: ' + tx.contractAddress, 'warning');
+        setGeneralError('Contract was created on blockchain, but failed to save to the database. You can find your contract at address: ' + tx.contractAddress);
       }
     } catch (err: any) {
       console.error('Error creating rental agreement:', err);

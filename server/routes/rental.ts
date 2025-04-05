@@ -14,9 +14,9 @@ const router = express.Router();
 // @ts-ignore
 router.post('/create', authenticate, async (req: Request, res: Response) => {
   try {
-    const { renterEmail, duration, securityDeposit, baseRent, name, contractAddress } = req.body;
+    const { renterEmail, duration, securityDeposit, baseRent, name, contractAddress, transactionHash } = req.body;
     
-    if (!renterEmail || !duration || !securityDeposit || !baseRent || !name) {
+    if (!renterEmail || !duration || !securityDeposit || !baseRent || !name || !contractAddress) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
     
@@ -33,41 +33,18 @@ router.post('/create', authenticate, async (req: Request, res: Response) => {
     }
     
     // Calculate grace period (securityDeposit / baseRent)
-    const gracePeriod = Math.floor(Number(securityDeposit) / Number(baseRent));
+    // Convert string values to proper numbers for calculation
+    const securityDepositNum = parseFloat(securityDeposit);
+    const baseRentNum = parseFloat(baseRent);
+    const gracePeriod = Math.floor(securityDepositNum / baseRentNum);
     
-    // Contract creation result
-    let result: { contractAddress: string, transactionHash?: string };
-    
-    if (contractAddress) {
-      // If contract address is provided, skip blockchain contract creation
-      console.log('Contract already created at address:', contractAddress);
-      result = { contractAddress };
-      
-      // Validate the contract exists on the blockchain
-      try {
-        await blockchainService.getRentalAgreementDetails(contractAddress);
-      } catch (error) {
-        return res.status(400).json({ 
-          message: 'Invalid contract address or contract not found on blockchain',
-          error: (error as Error).message
-        });
-      }
-    } else {
-      // Create the rental agreement on the blockchain
-      result = await blockchainService.createRentalAgreement(
-        landlord.walletAddress,
-        renter.walletAddress,
-        duration,
-        securityDeposit.toString(),
-        baseRent.toString(),
-        gracePeriod,
-        name
-      );
-    }
+    // Ensure grace period is within contract requirements (less than duration/2)
+    const maxGracePeriod = Math.floor(duration / 2);
+    const finalGracePeriod = Math.min(gracePeriod, maxGracePeriod);
     
     // Store the rental agreement in the database
     const rentalAgreement = await RentalAgreement.create({
-      contractAddress: result.contractAddress,
+      contractAddress,
       landlordId: landlord.id,
       renterId: renter.id,
       name,
@@ -75,22 +52,37 @@ router.post('/create', authenticate, async (req: Request, res: Response) => {
       duration,
       securityDeposit,
       baseRent,
-      gracePeriod
+      gracePeriod: finalGracePeriod
     });
     
+    // If a transaction hash is provided, record the payment
+    if (transactionHash) {
+      await Payment.create({
+        rentalAgreementId: rentalAgreement.id,
+        payerId: landlord.id,
+        recipientId: renter.id,
+        amount: 0, // No actual payment for creation
+        txHash: transactionHash,
+        type: PaymentType.CONTRACT_CREATION,
+        paymentDate: new Date()
+      });
+    }
+    
     res.status(201).json({
+      success: true,
       message: 'Rental agreement created successfully',
       agreement: {
         id: rentalAgreement.id,
         contractAddress: rentalAgreement.contractAddress,
         name: rentalAgreement.name,
         status: rentalAgreement.status,
-        transactionHash: result.transactionHash
+        transactionHash
       }
     });
   } catch (error) {
     console.error('Error creating rental agreement:', error);
     res.status(500).json({
+      success: false,
       message: 'Failed to create rental agreement',
       error: (error as Error).message
     });
@@ -166,9 +158,6 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'You are not authorized to view this agreement' });
     }
     
-    // Get on-chain data
-    const onChainDetails = await blockchainService.getRentalAgreementDetails(address);
-    
     // Get payment history
     const payments = await Payment.findAll({
       where: { rentalAgreementId: agreement.id },
@@ -183,7 +172,16 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
     const agreementJson = agreement.toJSON();
     agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
     
+    // Try to get on-chain data, but don't fail if it's not available
+    let onChainDetails = null;
+    try {
+      onChainDetails = await blockchainService.getRentalAgreementDetails(address);
+    } catch (error) {
+      console.warn(`Could not fetch on-chain data for rental agreement ${address}:`, error);
+    }
+    
     res.json({
+      success: true,
       agreement: {
         ...agreementJson,
         onChain: onChainDetails
@@ -193,6 +191,7 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error retrieving rental agreement:', error);
     res.status(500).json({
+      success: false,
       message: 'Failed to retrieve rental agreement',
       error: (error as Error).message
     });
