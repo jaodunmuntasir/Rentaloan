@@ -1,11 +1,15 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { User } from './user.model';
 import { LoanRequest } from './loan-request.model';
+import { LoanOffer } from './loan-offer.model';
+import { RentalAgreement } from './rental-agreement.model';
 
 export enum LoanAgreementStatus {
   CREATED = 'CREATED',
   PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
+  FUNDED = 'FUNDED',
+  COMPLETED = 'COMPLETED',
   FAILED = 'FAILED',
   CLOSED = 'CLOSED'
 }
@@ -31,6 +35,26 @@ export class LoanAgreement extends Model {
 
   @BelongsTo(() => LoanRequest)
   loanRequest!: LoanRequest;
+
+  @ForeignKey(() => LoanOffer)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: false
+  })
+  loanOfferId!: number;
+
+  @BelongsTo(() => LoanOffer)
+  loanOffer!: LoanOffer;
+
+  @ForeignKey(() => RentalAgreement)
+  @Column({
+    type: DataType.INTEGER,
+    allowNull: false
+  })
+  rentalAgreementId!: number;
+
+  @BelongsTo(() => RentalAgreement)
+  rentalAgreement!: RentalAgreement;
 
   @ForeignKey(() => User)
   @Column({
@@ -88,4 +112,11 @@ export class LoanAgreement extends Model {
     allowNull: true
   })
   startDate!: Date;
+
+  @Column({
+    type: DataType.DECIMAL(18, 8),
+    allowNull: false,
+    defaultValue: 0
+  })
+  remainingBalance!: string;
 } 

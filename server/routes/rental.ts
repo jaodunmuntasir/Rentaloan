@@ -14,7 +14,7 @@ const router = express.Router();
 // @ts-ignore
 router.post('/create', authenticate, async (req: Request, res: Response) => {
   try {
-    const { renterEmail, duration, securityDeposit, baseRent, name } = req.body;
+    const { renterEmail, duration, securityDeposit, baseRent, name, contractAddress } = req.body;
     
     if (!renterEmail || !duration || !securityDeposit || !baseRent || !name) {
       return res.status(400).json({ message: 'Missing required fields' });
@@ -35,16 +35,35 @@ router.post('/create', authenticate, async (req: Request, res: Response) => {
     // Calculate grace period (securityDeposit / baseRent)
     const gracePeriod = Math.floor(Number(securityDeposit) / Number(baseRent));
     
-    // Create the rental agreement on the blockchain
-    const result = await blockchainService.createRentalAgreement(
-      landlord.walletAddress,
-      renter.walletAddress,
-      duration,
-      securityDeposit.toString(),
-      baseRent.toString(),
-      gracePeriod,
-      name
-    );
+    // Contract creation result
+    let result: { contractAddress: string, transactionHash?: string };
+    
+    if (contractAddress) {
+      // If contract address is provided, skip blockchain contract creation
+      console.log('Contract already created at address:', contractAddress);
+      result = { contractAddress };
+      
+      // Validate the contract exists on the blockchain
+      try {
+        await blockchainService.getRentalAgreementDetails(contractAddress);
+      } catch (error) {
+        return res.status(400).json({ 
+          message: 'Invalid contract address or contract not found on blockchain',
+          error: (error as Error).message
+        });
+      }
+    } else {
+      // Create the rental agreement on the blockchain
+      result = await blockchainService.createRentalAgreement(
+        landlord.walletAddress,
+        renter.walletAddress,
+        duration,
+        securityDeposit.toString(),
+        baseRent.toString(),
+        gracePeriod,
+        name
+      );
+    }
     
     // Store the rental agreement in the database
     const rentalAgreement = await RentalAgreement.create({

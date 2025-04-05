@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContracts } from '../../contexts/ContractContext';
+import { useWallet } from '../../contexts/WalletContext';
+import { RentalApi } from '../../services/api.service';
 import { useToast } from '../../contexts/ToastContext';
 import { UserApi } from '../../services/api.service';
-import { RentalAgreementApi } from '../../services/rental.service';
-import { useWallet } from '../../contexts/WalletContext';
 
 // UI Components
 import { Button } from '../../components/ui/button';
@@ -165,8 +165,17 @@ const RentalCreate: React.FC = () => {
         throw new Error('Tenant wallet address is missing');
       }
 
-      // Create rental agreement on the blockchain
-      const result = await createRentalAgreement(
+      // Step 1: Create rental agreement on the blockchain
+      console.log("Creating rental agreement on blockchain with parameters:", {
+        tenant: tenant.walletAddress,
+        duration: formData.duration,
+        securityDeposit: formData.securityDeposit,
+        baseRent: formData.baseRent,
+        gracePeriod: calculateGracePeriod(),
+        name: formData.name
+      });
+
+      const contractAddress = await createRentalAgreement(
         tenant.walletAddress,
         formData.duration,
         formData.securityDeposit,
@@ -175,47 +184,50 @@ const RentalCreate: React.FC = () => {
         formData.name
       );
 
-      if (!result) {
+      if (!contractAddress) {
         throw new Error('Failed to create rental agreement on the blockchain');
       }
 
-      // Check if the result is a valid contract address (0x followed by 40 hex chars)
-      const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(result);
-      
-      if (!isContractAddress) {
-        // If it's not a valid contract address, it's likely a transaction hash
-        showToast('Contract created but address could not be retrieved. Using transaction hash instead.', 'warning');
-        console.log('Using transaction hash instead of contract address:', result);
-      }
+      console.log("Contract successfully created at address:", contractAddress);
 
-      // Create rental agreement in the database using either the contract address or tx hash
-      const createdAgreement = await RentalAgreementApi.createRentalAgreement(
-        user,
-        {
-          contractAddress: result, // This could be either the contract address or the tx hash
-          name: formData.name,
-          landlordId: user?.uid || '',
-          tenantId: tenant.id,
-          status: isContractAddress ? 'active' : 'pending', // Mark as pending if we only have the tx hash
+      // Step 2: Store contract data in the database
+      console.log("Storing contract in database:", {
+        contractAddress,
+        renterEmail: tenant.email,
+        duration: formData.duration,
+        securityDeposit: formData.securityDeposit,
+        baseRent: formData.baseRent,
+        name: formData.name
+      });
+      
+      const rentalData = {
+        contractAddress,
+        renterEmail: tenant.email,
+        duration: parseInt(formData.duration.toString()),
+        securityDeposit: formData.securityDeposit,
+        baseRent: formData.baseRent,
+        name: formData.name
+      };
+      
+      try {
+        const createdAgreement = await RentalApi.createRental(
+          user,
+          rentalData
+        );
+
+        if (!createdAgreement.success) {
+          throw new Error('Failed to save rental agreement to the database');
         }
-      );
 
-      if (!createdAgreement.success) {
-        throw new Error('Contract was created on the blockchain, but failed to save to the database.');
-      }
-
-      showToast(
-        isContractAddress 
-          ? 'Rental agreement created successfully!' 
-          : 'Rental agreement transaction submitted. Contract details will be available shortly.',
-        isContractAddress ? 'success' : 'info'
-      );
-      
-      // Navigate to appropriate page
-      if (isContractAddress) {
-        navigate(`/rental/${result}`);
-      } else {
-        navigate('/rental'); // Go to the rental list instead if we only have tx hash
+        showToast('Rental agreement created successfully!', 'success');
+        
+        // Navigate to the rental details page
+        navigate(`/rental/${contractAddress}`);
+      } catch (dbError) {
+        console.error('Error saving to database:', dbError);
+        // Even if the database save fails, we should show that the contract was created
+        showToast('Contract was created on blockchain, but database storage failed. Contract address: ' + contractAddress, 'warning');
+        setGeneralError('Contract was created on blockchain, but failed to save to the database. You can find your contract at address: ' + contractAddress);
       }
     } catch (err: any) {
       console.error('Error creating rental agreement:', err);

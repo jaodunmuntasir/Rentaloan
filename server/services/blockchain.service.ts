@@ -547,6 +547,119 @@ export const createLoan = async (
   }
 };
 
+// Get loan details by combining contract data
+export const getLoanDetails = async (contractAddress: string) => {
+  try {
+    const loanContract = await getLoanAgreementContract(contractAddress);
+    
+    // Get basic loan details
+    const details = await getLoanAgreementDetails(contractAddress);
+    
+    // Get repayment schedule
+    const schedule = await getRepaymentSchedule(contractAddress);
+    
+    return {
+      ...details,
+      repaymentSchedule: schedule
+    };
+  } catch (error) {
+    console.error('Error getting loan details:', error);
+    throw error;
+  }
+};
+
+// Verify loan initialization transaction
+export const verifyLoanInitialization = async (
+  contractAddress: string,
+  lenderWalletAddress: string,
+  transactionHash: string
+) => {
+  try {
+    // Get transaction details
+    const tx = await provider.getTransaction(transactionHash);
+    if (!tx) {
+      throw new Error('Transaction not found');
+    }
+    
+    // Verify transaction is from the lender
+    if (tx.from.toLowerCase() !== lenderWalletAddress.toLowerCase()) {
+      return false;
+    }
+    
+    // Verify transaction is to the loan contract
+    if (tx.to?.toLowerCase() !== contractAddress.toLowerCase()) {
+      return false;
+    }
+    
+    // Get receipt to check success
+    const receipt = await provider.getTransactionReceipt(transactionHash);
+    if (!receipt || receipt.status === 0) {
+      return false;
+    }
+    
+    // Check function signature for initialize
+    const initializeSignature = ethers.id('initializeLoan()').substring(0, 10); // First 4 bytes of hash
+    if (!tx.data.startsWith(initializeSignature)) {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error verifying loan initialization:', error);
+    return false;
+  }
+};
+
+// Verify loan repayment transaction
+export const verifyLoanRepayment = async (
+  contractAddress: string,
+  borrowerWalletAddress: string,
+  month: number,
+  amount: string,
+  transactionHash: string
+) => {
+  try {
+    // Get transaction details
+    const tx = await provider.getTransaction(transactionHash);
+    if (!tx) {
+      throw new Error('Transaction not found');
+    }
+    
+    // Verify transaction is from the borrower
+    if (tx.from.toLowerCase() !== borrowerWalletAddress.toLowerCase()) {
+      return false;
+    }
+    
+    // Verify transaction is to the loan contract
+    if (tx.to?.toLowerCase() !== contractAddress.toLowerCase()) {
+      return false;
+    }
+    
+    // Get receipt to check success
+    const receipt = await provider.getTransactionReceipt(transactionHash);
+    if (!receipt || receipt.status === 0) {
+      return false;
+    }
+    
+    // Check function signature and parameters for makeRepayment
+    const makeRepaymentSignature = ethers.id('makeRepayment(uint256)').substring(0, 10); // First 4 bytes of hash
+    if (!tx.data.startsWith(makeRepaymentSignature)) {
+      return false;
+    }
+    
+    // Verify the loan amount (ethers v6 specific check)
+    const expectedWeiAmount = ethers.parseEther(amount);
+    if (tx.value !== expectedWeiAmount) {
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error verifying loan repayment:', error);
+    return false;
+  }
+};
+
 // Initialize the blockchain service when imported
 initBlockchain();
 
@@ -565,5 +678,8 @@ export default {
   getLoanAgreementDetails,
   getRepaymentSchedule,
   getAvailableCollateral,
-  createLoan
+  createLoan,
+  getLoanDetails,
+  verifyLoanInitialization,
+  verifyLoanRepayment
 }; 

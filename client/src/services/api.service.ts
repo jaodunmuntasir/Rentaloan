@@ -112,15 +112,14 @@ export const UserApi = {
 export const RentalApi = {
   // Create rental agreement
   async createRental(user: FirebaseUser | AppUser | null, data: {
-    contractAddress: string;
-    propertyAddress: string;
-    propertyNftId: string;
-    tenant: string;
-    rentAmount: string;
+    contractAddress?: string;
+    renterEmail: string;
+    duration: number;
     securityDeposit: string;
-    rentDuration: number;
-    paymentInterval: number;
+    baseRent: string;
+    name: string;
   }) {
+    // Use the existing endpoint whether the contract exists or not
     return apiCall('/api/rental/create', 'POST', user, data);
   },
   
@@ -170,7 +169,11 @@ export const LoanApi = {
     loanDuration: number;
     maxInterestRate: number;
   }) {
-    return apiCall('/api/loan/request', 'POST', user, data);
+    return apiCall('/api/loan/request', 'POST', user, {
+      rentalAgreementAddress: data.rentalAgreementAddress,
+      amount: data.requestedAmount,
+      duration: data.loanDuration
+    });
   },
   
   // Get all loan requests
@@ -180,7 +183,7 @@ export const LoanApi = {
   
   // Get a specific loan request
   async getLoanRequest(user: FirebaseUser | AppUser | null, id: string) {
-    return apiCall(`/api/loan/request/${id}`, 'GET', user);
+    return apiCall(`/api/loan/requests/${id}`, 'GET', user);
   },
   
   // Create loan offer
@@ -191,12 +194,18 @@ export const LoanApi = {
     loanDuration: number;
     graceMonths: number;
   }) {
-    return apiCall('/api/loan/offer', 'POST', user, data);
+    return apiCall('/api/loan/offer', 'POST', user, {
+      loanRequestId: data.loanRequestId,
+      interestRate: data.interestRate,
+      expirationDays: 7 // Add an appropriate expiration period
+    });
   },
   
   // Get all loan offers for a request
   async getLoanOffers(user: FirebaseUser | AppUser | null, requestId: string) {
-    return apiCall(`/api/loan/request/${requestId}/offers`, 'GET', user);
+    // Include this with the request details route since there's no dedicated endpoint
+    const response = await apiCall(`/api/loan/requests/${requestId}`, 'GET', user);
+    return response.loanOffers;
   },
   
   // Accept a loan offer
@@ -205,6 +214,7 @@ export const LoanApi = {
   },
   
   // Create loan agreement on blockchain
+  // Note: This is handled automatically by the server when accepting an offer
   async createLoanAgreement(user: FirebaseUser | AppUser | null, data: {
     loanOfferId: string;
     contractAddress: string;

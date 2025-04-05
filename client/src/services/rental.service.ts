@@ -23,6 +23,13 @@ export const RentalAgreementApi = {
       landlordId: string;
       tenantId: string;
       status: string;
+      propertyAddress: string;
+      propertyNftId: string;
+      tenant: string;
+      rentAmount: string;
+      securityDeposit: string;
+      rentDuration: number;
+      paymentInterval: number;
     }
   ) {
     return apiCall<RentalAgreement>('/api/rental/create', 'POST', user, data);
