@@ -89,5 +89,13 @@ export const RentalAgreementApi = {
       additionalMonths, 
       transactionHash 
     });
+  },
+  
+  // Update rental agreement status to CLOSED
+  async updateStatusToClosed(
+    user: FirebaseUser | AppUser | null,
+    address: string
+  ) {
+    return apiCall(`/api/rental/${address}/update-status-closed`, 'POST', user);
   }
 }; 

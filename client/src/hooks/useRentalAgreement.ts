@@ -26,6 +26,8 @@ interface RentalAgreementDetails {
   userRole?: string;
   landlordDetails?: any;
   renterDetails?: any;
+  dueAmount: string;
+  status: number;
 }
 
 export function useRentalAgreement(contractAddress?: string) {
@@ -201,6 +203,8 @@ export function useRentalAgreement(contractAddress?: string) {
         currentRentPaid: (blockchainData.lastPaidMonth ?? 0) > 0,
         currentMonth: blockchainData.lastPaidMonth ?? 0,
         lastPaidMonth: blockchainData.lastPaidMonth ?? 0,
+        dueAmount: blockchainData.dueAmount ?? "0.0",
+        status: blockchainData.status,
         
         // Additional blockchain data
         gracePeriod: blockchainData.gracePeriod ?? Math.floor(Number(blockchainData.securityDeposit) / Number(blockchainData.rentAmount)),
@@ -300,6 +304,10 @@ export function useRentalAgreement(contractAddress?: string) {
       const receipt = await tx.wait();
       console.log("Transaction confirmed:", receipt);
       
+      // Get rent duration to check if this is the last month
+      const rentDuration = await rentalContract.rentalDuration();
+      const isLastMonth = month === Number(rentDuration);
+      
       // Update backend
       if (currentUser) {
         await RentalApi.payRent(
@@ -309,6 +317,15 @@ export function useRentalAgreement(contractAddress?: string) {
           receipt.hash,
           month
         );
+        
+        // If this is the last month, update status to CLOSED in database
+        if (isLastMonth) {
+          console.log("Last month paid, updating rental agreement status to CLOSED");
+          await RentalApi.updateStatusToClosed(
+            currentUser,
+            contractAddress
+          );
+        }
       }
       
       // Refresh details
@@ -338,7 +355,7 @@ export function useRentalAgreement(contractAddress?: string) {
       console.log(`Skipping rent for month ${month}`);
       
       // Send transaction to skip rent for the specified month
-      const tx = await rentalContract.skipRentPayment(month);
+      const tx = await rentalContract.skipRent(month);
       console.log("Transaction submitted:", tx.hash);
       
       // Wait for transaction to be mined

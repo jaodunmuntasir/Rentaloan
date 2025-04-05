@@ -46,32 +46,32 @@ This document provides a systematic checklist for manually testing all features 
 
 ## Renter/Borrower Perspective
 
-- [ ] **View Rental Agreements**
-  - [ ] Renter can view all their rental agreements
-  - [ ] Rental agreement details show correct property information
-  - [ ] Payment history is displayed correctly
-  - [ ] Due dates for next payments are clearly shown
+- [x] **View Rental Agreements**
+  - [x] Renter can view all their rental agreements
+  - [x] Rental agreement details show correct information
+  - [x] Payment history is displayed correctly
+  - [x] Due dates for next payments are clearly shown
 
-- [ ] **Security Deposit Payment**
-  - [ ] Renter can initiate security deposit payment
-  - [ ] Payment amount matches the agreement terms
-  - [ ] Blockchain transaction is initiated correctly
-  - [ ] Transaction status is communicated to the renter
-  - [ ] Rental status updates after successful payment
+- [x] **Security Deposit Payment**
+  - [x] Renter can initiate security deposit payment
+  - [x] Payment amount matches the agreement terms
+  - [x] Blockchain transaction is initiated correctly
+  - [x] Transaction status is communicated to the renter
+  - [x] Rental status updates after successful payment
 
-- [ ] **Rent Payment**
-  - [ ] Renter can initiate monthly rent payment
-  - [ ] System correctly calculates the current month due
-  - [ ] Blockchain transaction is initiated correctly
-  - [ ] Transaction status is communicated to the renter
-  - [ ] Payment history updates after successful payment
+- [x] **Rent Payment**
+  - [x] Renter can initiate monthly rent payment
+  - [x] System correctly calculates the current month due
+  - [x] Blockchain transaction is initiated correctly
+  - [x] Transaction status is communicated to the renter
+  - [x] Payment history updates after successful payment
 
 - [ ] **Skip Rent**
-  - [ ] Renter can request to skip rent when eligible
-  - [ ] System verifies eligibility based on rental contract terms
-  - [ ] Blockchain transaction is initiated correctly
-  - [ ] Transaction status is communicated to the renter
-  - [ ] Next payment due date updates accordingly
+  - [x] Renter can request to skip rent when eligible
+  - [x] System verifies eligibility based on rental contract terms
+  - [x] Blockchain transaction is initiated correctly
+  - [x] Transaction status is communicated to the renter
+  - [x] Next payment due date updates accordingly
 
 - [ ] **Extend Rental Agreement**
   - [ ] Renter can request rental agreement extension

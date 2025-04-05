@@ -20,6 +20,7 @@ interface RentalDetails {
   name?: string;
   tenant?: string;
   userRole?: string;
+  status: number;
   [key: string]: any; // Allow other properties
 }
 
@@ -148,6 +149,10 @@ const RentalDetail: React.FC = () => {
     );
   }
   
+  // Debug the contract status
+  console.log("Contract Status:", (details as RentalDetails)?.status);
+  console.log("Is contract closed?", (details as RentalDetails)?.status === 2);
+  
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -176,8 +181,8 @@ const RentalDetail: React.FC = () => {
             <span className="hidden sm:inline">Details</span>
           </TabsTrigger>
           
-          {/* Only show action tabs for renters */}
-          {isRenter() && (
+          {/* Only show action tabs for renters and when contract is not closed */}
+          {isRenter() && (details as RentalDetails)?.status !== 2 && (
             <>
               <TabsTrigger value="security" className="flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4" />
@@ -190,17 +195,20 @@ const RentalDetail: React.FC = () => {
             </>
           )}
           
-          <TabsTrigger value="extend" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Extend</span>
-          </TabsTrigger>
+          {/* Only show extend tab when contract is not closed */}
+          {(details as RentalDetails)?.status !== 2 && (
+            <TabsTrigger value="extend" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              <span className="hidden sm:inline">Extend</span>
+            </TabsTrigger>
+          )}
         </TabsList>
         
         <TabsContent value="details" className="mt-6">
           <RentalAgreementDetails contractAddress={address} />
         </TabsContent>
         
-        {isRenter() && (
+        {isRenter() && (details as RentalDetails)?.status !== 2 && (
           <>
             <TabsContent value="security" className="mt-6">
               <Card>
@@ -240,22 +248,24 @@ const RentalDetail: React.FC = () => {
           </>
         )}
         
-        <TabsContent value="extend" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Extend Agreement</CardTitle>
-              <CardDescription>
-                Extend your current rental agreement
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ExtendAgreement 
-                contractAddress={address} 
-                onSuccess={handleActionSuccess}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {(details as RentalDetails)?.status !== 2 && (
+          <TabsContent value="extend" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Extend Agreement</CardTitle>
+                <CardDescription>
+                  Extend your current rental agreement
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ExtendAgreement 
+                  contractAddress={address} 
+                  onSuccess={handleActionSuccess}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

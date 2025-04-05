@@ -527,4 +527,40 @@ router.post('/:address/extend', authenticate, async (req: Request, res: Response
   }
 });
 
+// Update rental agreement status to CLOSED
+// @ts-ignore
+router.post('/:address/update-status-closed', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the rental agreement in the database
+    const agreement = await RentalAgreement.findOne({
+      where: { contractAddress: address }
+    });
+    
+    if (!agreement) {
+      return res.status(404).json({ message: 'Rental agreement not found' });
+    }
+    
+    // Update the status to CLOSED
+    await agreement.update({ status: RentalAgreementStatus.CLOSED });
+    
+    res.json({
+      message: 'Rental agreement status updated to CLOSED successfully',
+      status: RentalAgreementStatus.CLOSED
+    });
+  } catch (error) {
+    console.error('Error updating rental agreement status:', error);
+    res.status(500).json({
+      message: 'Failed to update rental agreement status',
+      error: (error as Error).message
+    });
+  }
+});
+
 export default router; 

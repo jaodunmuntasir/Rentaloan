@@ -32,7 +32,7 @@ interface ExtendedRentalAgreementDetails {
   userRole?: string;
   landlordDetails?: any;
   renterDetails?: any;
-  dueAmount?: string;
+  dueAmount: string;
   skippedMonths?: number;
 }
 
@@ -208,9 +208,8 @@ const PayRent: React.FC<PayRentProps> = ({
   
   const paymentStatus = getPaymentStatus();
   const typedDetails = details as ExtendedRentalAgreementDetails;
-  const totalDueAmount = typedDetails.dueAmount 
-    ? parseFloat(typedDetails.rentAmount) + parseFloat(typedDetails.dueAmount)
-    : parseFloat(typedDetails.rentAmount);
+  const totalDueAmount = parseFloat(typedDetails.rentAmount) + 
+    (typedDetails.dueAmount ? parseFloat(typedDetails.dueAmount) : 0);
   
   return (
     <Card className="w-full">
@@ -254,7 +253,7 @@ const PayRent: React.FC<PayRentProps> = ({
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Payment Cycle</p>
-              <p className="text-xl font-medium">Every {details.paymentInterval} month(s)</p>
+              <p className="text-xl font-medium">Monthly</p>
             </div>
           </div>
         </div>
@@ -280,7 +279,7 @@ const PayRent: React.FC<PayRentProps> = ({
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Start</span>
-                <span>Current</span>
+                <span></span>
                 <span>End</span>
               </div>
             </div>
@@ -324,15 +323,9 @@ const PayRent: React.FC<PayRentProps> = ({
             <span className="text-muted-foreground">Base Rent</span>
             <span>{details.rentAmount} ETH</span>
           </div>
-          {typedDetails.dueAmount && parseFloat(typedDetails.dueAmount) > 0 && (
-            <div className="flex justify-between py-1">
-              <span className="text-muted-foreground">Due Amount (from skipped payments)</span>
-              <span>{typedDetails.dueAmount} ETH</span>
-            </div>
-          )}
           <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Payment Processing Fee</span>
-            <span>0.00 ETH</span>
+            <span className="text-muted-foreground">Due Amount (from skipped payments)</span>
+            <span>{typedDetails.dueAmount ? typedDetails.dueAmount : "0.00"} ETH</span>
           </div>
           <Separator />
           <div className="flex justify-between py-1 font-medium">
@@ -397,6 +390,17 @@ const PayRent: React.FC<PayRentProps> = ({
                 Skip Rent for Month {selectedMonth}
               </>
             )}
+          </Button>
+        )}
+        
+        {/* Request a Loan button */}
+        {(details as any).status !== 2 && (
+          <Button
+            className="w-full mt-2"
+            variant="secondary"
+            onClick={() => window.location.href = '/loans/request'}
+          >
+            Request a Loan
           </Button>
         )}
       </CardFooter>

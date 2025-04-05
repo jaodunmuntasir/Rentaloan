@@ -86,7 +86,7 @@ contract RentalAgreement is IRentalAgreement, ReentrancyGuard {
         rentalDuration = _duration;
         securityDeposit = _securityDeposit;
         _baseRent = _baseRentAmount;
-        gracePeriod = _securityDeposit / _baseRentAmount;
+        gracePeriod = _gracePeriod;
         _status = ContractStatus.INITIALIZED;
         
         emit ContractCreated(landlord, renter, _duration, _securityDeposit, _baseRent);
@@ -297,7 +297,15 @@ contract RentalAgreement is IRentalAgreement, ReentrancyGuard {
     }
 
     function updateGracePeriod() internal {
-        gracePeriod = currentSecurityDeposit / _baseRent;
+        uint256 calculatedGrace = currentSecurityDeposit / _baseRent;
+        
+        // If rental duration is less than the calculated grace period,
+        // set grace period to rental duration - 1
+        if (rentalDuration < calculatedGrace) {
+            gracePeriod = rentalDuration > 0 ? rentalDuration - 1 : 0;
+        } else {
+            gracePeriod = calculatedGrace;
+        }
     }
     
     /**
