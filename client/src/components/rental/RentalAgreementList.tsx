@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useContracts } from '../../contexts/ContractContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -8,6 +9,7 @@ import { Loader2, Home, CalendarClock, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Separator } from '../ui/separator';
 import { ethers} from 'ethers';
+import { RentalApi } from '../../services/api.service';
 
 // Extended interface for RentalAgreementSummary with additional properties
 interface RentalAgreementSummary {
@@ -23,6 +25,7 @@ interface RentalAgreementSummary {
   securityDepositPaid: boolean;
   startDate?: Date;
   endDate?: Date;
+  isUserTenant: boolean;
 }
 
 const RentalAgreementCard: React.FC<{
@@ -121,6 +124,7 @@ const RentalAgreementList: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth(); // Fixed: using currentUser instead of user
   const { rentalFactory, getRentalContract } = useContracts(); // Use getRentalContract
+  const { walletAddress } = useWallet(); // Get the connected wallet address
   const [agreements, setAgreements] = useState<RentalAgreementSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -138,24 +142,59 @@ const RentalAgreementList: React.FC = () => {
         
         console.log("Fetching rental agreements for user:", currentUser.uid);
         
-        // Get agreements where user is renter/tenant
-        const tenantAgreements = await rentalFactory.getRenterAgreements();
-        console.log("Renter agreements:", tenantAgreements);
+        let allAddresses = [];
         
-        // Get agreements where user is landlord
-        const landlordAgreements = await rentalFactory.getLandlordAgreements();
-        console.log("Landlord agreements:", landlordAgreements);
+        try {
+          // First try to get from blockchain
+          // Get agreements where user is renter/tenant
+          const tenantAgreements = await rentalFactory.getRenterAgreements();
+          console.log("Renter agreements:", tenantAgreements);
+          
+          // Get agreements where user is landlord
+          const landlordAgreements = await rentalFactory.getLandlordAgreements();
+          console.log("Landlord agreements:", landlordAgreements);
+          
+          // Extract the contract addresses
+          const tenantAddresses = [];
+          for (let i = 0; i < tenantAgreements.length; i++) {
+            tenantAddresses.push(tenantAgreements[i].contractAddress);
+          }
+          
+          const landlordAddresses = [];
+          for (let i = 0; i < landlordAgreements.length; i++) {
+            landlordAddresses.push(landlordAgreements[i].contractAddress);
+          }
+          
+          // Combine and remove duplicates
+          allAddresses = Array.from(new Set([...tenantAddresses, ...landlordAddresses]));
+        } catch (blockchainError) {
+          console.error("Error fetching agreements from blockchain:", blockchainError);
+          
+          // Fallback to server API
+          try {
+            console.log("Falling back to server API");
+            const response = await RentalApi.getRentals(currentUser);
+            if (response && response.agreements) {
+              allAddresses = response.agreements.map((agreement: any) => agreement.contractAddress);
+            }
+          } catch (apiError) {
+            console.error("Error fetching agreements from API:", apiError);
+            setError("Failed to load rental agreements. Please try again later.");
+            setLoading(false);
+            return;
+          }
+        }
         
-        // Extract the contract addresses
-        const tenantAddresses = tenantAgreements.map((info: any) => info.contractAddress);
-        const landlordAddresses = landlordAgreements.map((info: any) => info.contractAddress);
-        
-        // Combine and remove duplicates
-        const allAddresses = Array.from(new Set([...tenantAddresses, ...landlordAddresses]));
         console.log("All agreement addresses:", allAddresses);
         
+        if (allAddresses.length === 0) {
+          setAgreements([]);
+          setLoading(false);
+          return;
+        }
+        
         // Fetch details for each agreement
-        const agreementPromises = allAddresses.map(async (address) => {
+        const agreementPromises = allAddresses.map(async (address: string) => {
           try {
             // Get rental contract using the context method
             const contract = await getRentalContract(address);
@@ -163,7 +202,6 @@ const RentalAgreementList: React.FC = () => {
             
             console.log("Fetching details for contract:", address);
             
-            // Try to fetch basic contract data (adapt to actual contract methods)
             try {
               // Get details from the contract
               const details = await contract.getContractDetails();
@@ -172,30 +210,31 @@ const RentalAgreementList: React.FC = () => {
               // Extract values from the returned array (format depends on contract implementation)
               const landlord = details[0]; // First element is usually the landlord address
               const tenant = details[1]; // Second element is usually the tenant/renter address
-              const rentAmount = ethers.formatEther(details[3]); // Assuming index 3 is the rent amount
+              const duration = Number(details[2]);
+              const securityDeposit = ethers.formatEther(details[3]); // Convert to ETH
+              const rentAmount = ethers.formatEther(details[4]); // Convert to ETH
+              const gracePeriod = Number(details[5]);
+              const statusCode = Number(details[6]);
               
-              // Check for deposit paid status and active state
-              let depositStatus = false;
-              try {
-                // Try to call a direct function if it exists
-                depositStatus = await contract.securityDepositPaid();
-              } catch (depositError) {
-                console.log("Couldn't get deposit status via direct method:", depositError);
-                // Use details from getContractDetails instead
-                depositStatus = details[4] > 0; // If there's a positive security deposit, consider it paid
-              }
-              console.log("Deposit status:", depositStatus);
+              // Determine if security deposit is paid by checking status
+              const securityDepositPaid = statusCode > 0;
               
-              // Create a property address from the contract address
+              // Create readable property details
               const propertyAddress = `Property at ${address.substring(0, 10)}...`;
-              
-              // Additional properties 
               const propertyName = 'Property ' + address.substring(0, 6);
-              const isActive = true; // Default to true if no direct method exists
-              const isExpired = false; 
-              const isTerminated = false;
+              
+              // Determine agreement status
+              const isActive = statusCode === 1; // Assuming 1 is the ACTIVE status code
+              const isExpired = false; // We don't have direct expired status
+              const isTerminated = statusCode === 2; // Assuming 2 is the TERMINATED status code
+              
+              // Set dates based on duration
               const startDate = new Date();
-              const endDate = new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000); // +30 days
+              const endDate = new Date(startDate.getTime() + duration * 30 * 24 * 60 * 60 * 1000); // Approximate months
+              
+              // Get current user address to determine role
+              const userAddressFromWallet = walletAddress?.toLowerCase() || '';
+              const isUserTenant = tenant.toLowerCase() === userAddressFromWallet;
               
               return {
                 address,
@@ -207,12 +246,41 @@ const RentalAgreementList: React.FC = () => {
                 rentAmount,
                 tenant,
                 landlord,
-                securityDepositPaid: depositStatus,
+                securityDepositPaid,
                 startDate,
-                endDate
+                endDate,
+                isUserTenant
               };
             } catch (contractError) {
               console.error(`Error accessing contract data for ${address}:`, contractError);
+              
+              // Try to get details from the API as a fallback
+              try {
+                const apiData = await RentalApi.getRental(currentUser, address);
+                if (apiData && apiData.agreement) {
+                  const agreement = apiData.agreement;
+                  const userRole = agreement.userRole;
+                  
+                  return {
+                    address,
+                    name: agreement.name || `Property ${address.substring(0, 6)}`,
+                    propertyAddress: `Property at ${address.substring(0, 10)}...`,
+                    isActive: agreement.status === 'ACTIVE',
+                    isExpired: false,
+                    isTerminated: agreement.status === 'TERMINATED',
+                    rentAmount: agreement.baseRent,
+                    tenant: agreement.renter?.walletAddress || 'Unknown',
+                    landlord: agreement.landlord?.walletAddress || 'Unknown',
+                    securityDepositPaid: agreement.status !== 'INITIALIZED',
+                    startDate: new Date(agreement.createdAt),
+                    endDate: new Date(new Date(agreement.createdAt).getTime() + 
+                      agreement.duration * 30 * 24 * 60 * 60 * 1000),
+                    isUserTenant: userRole === 'renter'
+                  };
+                }
+              } catch (apiError) {
+                console.error(`Error fetching API data for ${address}:`, apiError);
+              }
               
               // Fallback to simplified data
               return {
@@ -227,7 +295,8 @@ const RentalAgreementList: React.FC = () => {
                 landlord: "Unknown",
                 securityDepositPaid: false,
                 startDate: new Date(),
-                endDate: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000) 
+                endDate: new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000),
+                isUserTenant: false
               };
             }
           } catch (err) {
@@ -251,7 +320,7 @@ const RentalAgreementList: React.FC = () => {
     };
     
     fetchAgreements();
-  }, [currentUser, rentalFactory, getRentalContract]);
+  }, [currentUser, rentalFactory, getRentalContract, walletAddress]);
   
   const handleSelectAgreement = (address: string) => {
     navigate(`/rental/${address}`);
@@ -302,12 +371,8 @@ const RentalAgreementList: React.FC = () => {
   }
   
   // Split agreements into tenant and landlord groups
-  const tenantAgreements = agreements.filter(a => 
-    currentUser && a.tenant.toLowerCase() === currentUser.uid.toLowerCase()
-  );
-  const landlordAgreements = agreements.filter(a => 
-    currentUser && a.landlord.toLowerCase() === currentUser.uid.toLowerCase()
-  );
+  const tenantAgreements = agreements.filter(a => a.isUserTenant);
+  const landlordAgreements = agreements.filter(a => !a.isUserTenant);
   
   return (
     <div className="space-y-6">

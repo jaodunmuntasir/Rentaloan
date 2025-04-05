@@ -117,8 +117,8 @@ const RentalAgreementDetails: React.FC<RentalAgreementDetailsProps> = ({
   const isCurrentUserRenter = () => {
     if (!details || !currentUser) return false;
     return details.userRole === 'renter' || 
-           (currentUser.walletAddress && 
-            currentUser.walletAddress.toLowerCase() === details.tenant.toLowerCase());
+           ((currentUser as any).walletAddress && 
+            (currentUser as any).walletAddress.toLowerCase() === details.tenant.toLowerCase());
   };
   
   // Loading state

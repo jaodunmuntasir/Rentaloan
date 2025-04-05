@@ -30,12 +30,12 @@ This document provides a systematic checklist for manually testing all features 
   - [x] Grace period for late payments is automatically calculated and set
   - [x] Blockchain transaction is initiated upon submission
   - [ ] User is informed of transaction status
-  - [ ] New rental agreement appears in landlord's dashboard
+  - [x] New rental agreement appears in landlord's dashboard
 
 - [ ] **Rental Agreement Management**
-  - [ ] Landlord can view all their rental agreements
+  - [x] Landlord can view all their rental agreements
   - [ ] Landlord can filter agreements by status
-  - [ ] Rental agreement details show correct property information
+  - [x] Rental agreement details show correct property information
   - [ ] Landlord can see payment history for each agreement
   - [ ] Landlord receives notification when tenant pays rent/deposit
 

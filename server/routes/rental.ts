@@ -10,6 +10,41 @@ import { Op } from 'sequelize';
 
 const router = express.Router();
 
+// Helper function to convert BigInt values to strings for JSON serialization
+const convertBigIntToString = (obj: any, seen = new WeakSet()): any => {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+  
+  // Handle circular references
+  if (typeof obj === 'object') {
+    if (seen.has(obj)) {
+      return obj; // Return the object without further processing to avoid recursion
+    }
+    seen.add(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => convertBigIntToString(item, seen));
+  }
+  
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = convertBigIntToString(obj[key], seen);
+      }
+    }
+    return result;
+  }
+  
+  return obj;
+};
+
 // Create rental agreement
 // @ts-ignore
 router.post('/create', authenticate, async (req: Request, res: Response) => {
@@ -168,6 +203,12 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
       order: [['paymentDate', 'DESC']]
     });
     
+    // Convert payments to plain objects to avoid circular references
+    const paymentsPlain = payments.map(payment => {
+      const plain = payment.get({ plain: true });
+      return plain;
+    });
+    
     // Add user's role in this specific agreement
     const agreementJson = agreement.toJSON();
     agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
@@ -176,18 +217,23 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
     let onChainDetails = null;
     try {
       onChainDetails = await blockchainService.getRentalAgreementDetails(address);
+      // Convert any BigInt values to strings for JSON serialization
+      onChainDetails = convertBigIntToString(onChainDetails);
     } catch (error) {
       console.warn(`Could not fetch on-chain data for rental agreement ${address}:`, error);
     }
     
-    res.json({
+    // Convert any BigInt values in the response data to strings
+    const responseData = {
       success: true,
       agreement: {
         ...agreementJson,
         onChain: onChainDetails
       },
-      payments
-    });
+      payments: convertBigIntToString(paymentsPlain)
+    };
+    
+    res.json(responseData);
   } catch (error) {
     console.error('Error retrieving rental agreement:', error);
     res.status(500).json({
@@ -254,7 +300,7 @@ router.post('/:address/pay-deposit', authenticate, async (req: Request, res: Res
       paymentDate: new Date()
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       message: 'Security deposit paid successfully',
       payment: {
         id: payment.id,
@@ -262,7 +308,7 @@ router.post('/:address/pay-deposit', authenticate, async (req: Request, res: Res
         type: payment.type,
         transactionHash: payment.txHash
       }
-    });
+    }));
   } catch (error) {
     console.error('Error paying security deposit:', error);
     res.status(500).json({
@@ -337,7 +383,7 @@ router.post('/:address/pay-rent', authenticate, async (req: Request, res: Respon
       paymentDate: new Date()
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       message: 'Rent paid successfully',
       payment: {
         id: payment.id,
@@ -346,7 +392,7 @@ router.post('/:address/pay-rent', authenticate, async (req: Request, res: Respon
         month: payment.month,
         transactionHash: payment.txHash
       }
-    });
+    }));
   } catch (error) {
     console.error('Error paying rent:', error);
     res.status(500).json({
@@ -402,10 +448,28 @@ router.post('/:address/skip-rent', authenticate, async (req: Request, res: Respo
       month
     );
     
-    res.json({
-      message: 'Rent skipped successfully',
-      transactionHash: result.transactionHash
+    // Record the payment in the database
+    const payment = await Payment.create({
+      rentalAgreementId: agreement.id,
+      payerId: user.id,
+      recipientId: agreement.landlordId,
+      amount: agreement.baseRent,
+      txHash: result.transactionHash,
+      type: PaymentType.RENT_SKIPPED,
+      month: month,
+      paymentDate: new Date()
     });
+    
+    res.json(convertBigIntToString({
+      message: 'Rent skipped successfully',
+      payment: {
+        id: payment.id,
+        amount: agreement.baseRent,
+        type: payment.type,
+        month: payment.month,
+        transactionHash: payment.txHash
+      }
+    }));
   } catch (error) {
     console.error('Error skipping rent:', error);
     res.status(500).json({
@@ -476,11 +540,11 @@ router.post('/:address/extend', authenticate, async (req: Request, res: Response
       duration: agreement.duration + additionalMonths
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       message: 'Rental agreement extended successfully',
       newDuration: agreement.duration,
       transactionHash: result.transactionHash
-    });
+    }));
   } catch (error) {
     console.error('Error extending rental agreement:', error);
     res.status(500).json({

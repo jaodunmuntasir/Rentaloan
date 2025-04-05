@@ -271,6 +271,7 @@ export const getRentalAgreementDetails = async (contractAddress: string) => {
     const rentalContract = await getRentalAgreementContract(contractAddress);
     const details = await rentalContract.getContractDetails();
     
+    // Make sure to convert all BigInt values to strings
     return {
       landlord: details[0],
       renter: details[1],
@@ -278,7 +279,7 @@ export const getRentalAgreementDetails = async (contractAddress: string) => {
       securityDeposit: ethers.formatEther(details[3]),
       baseRent: ethers.formatEther(details[4]),
       gracePeriod: Number(details[5]),
-      status: details[6], // ContractStatus enum (0 = INITIALIZED, 1 = ACTIVE, 2 = CLOSED)
+      status: Number(details[6]), // ContractStatus enum (0 = INITIALIZED, 1 = ACTIVE, 2 = CLOSED)
       currentSecurityDeposit: ethers.formatEther(details[7]),
       lastPaidMonth: Number(details[8]),
       dueAmount: ethers.formatEther(details[9])

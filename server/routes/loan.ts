@@ -11,6 +11,33 @@ import blockchainService from '../services/blockchain.service';
 
 const router = express.Router();
 
+// Helper function to convert BigInt values to strings for JSON serialization
+const convertBigIntToString = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (typeof obj === 'bigint') {
+    return obj.toString();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(item => convertBigIntToString(item));
+  }
+  
+  if (typeof obj === 'object') {
+    const result: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        result[key] = convertBigIntToString(obj[key]);
+      }
+    }
+    return result;
+  }
+  
+  return obj;
+};
+
 // Create loan request
 // @ts-ignore
 router.post('/request', authenticate, async (req: Request, res: Response) => {
@@ -160,11 +187,11 @@ router.get('/requests/:id', authenticate, async (req: Request, res: Response) =>
       loanRequest.rentalAgreement.contractAddress
     );
     
-    res.json({
+    res.json(convertBigIntToString({
       loanRequest,
       loanOffers,
       availableCollateral
-    });
+    }));
   } catch (error) {
     console.error('Error retrieving loan request:', error);
     res.status(500).json({
@@ -351,7 +378,7 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
         status: LoanAgreementStatus.ACTIVE
       });
       
-      res.json({
+      res.json(convertBigIntToString({
         message: 'Loan offer accepted and agreement created',
         loanAgreement: {
           id: loanAgreement.id,
@@ -361,7 +388,7 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
           duration: loanAgreement.duration,
           status: loanAgreement.status
         }
-      });
+      }));
     } catch (blockchainError) {
       // If blockchain operation fails, revert database changes
       await loanAgreement.update({ status: LoanAgreementStatus.FAILED });
@@ -415,7 +442,7 @@ router.get('/agreements', authenticate, async (req: Request, res: Response) => {
       ]
     });
     
-    res.json({ loanAgreements });
+    res.json(convertBigIntToString({ loanAgreements }));
   } catch (error) {
     console.error('Error retrieving loan agreements:', error);
     res.status(500).json({
@@ -475,11 +502,11 @@ router.get('/agreement/:address', authenticate, async (req: Request, res: Respon
       order: [['createdAt', 'DESC']]
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       loanAgreement,
       loanDetails,
       payments
-    });
+    }));
   } catch (error) {
     console.error('Error retrieving loan agreement:', error);
     res.status(500).json({
@@ -555,10 +582,10 @@ router.post('/agreement/:address/initialize', authenticate, async (req: Request,
       paymentDate: new Date()
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       message: 'Loan successfully initialized',
       status: loanAgreement.status
-    });
+    }));
   } catch (error) {
     console.error('Error initializing loan:', error);
     res.status(500).json({
@@ -643,11 +670,11 @@ router.post('/agreement/:address/repay', authenticate, async (req: Request, res:
       paymentDate: new Date()
     });
     
-    res.json({
+    res.json(convertBigIntToString({
       message: 'Loan repayment successful',
       remainingBalance,
       status: loanAgreement.status
-    });
+    }));
   } catch (error) {
     console.error('Error making loan repayment:', error);
     res.status(500).json({

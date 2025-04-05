@@ -10,6 +10,14 @@ import sequelize from './models';
 
 const app = express();
 
+// Custom JSON formatter to handle circular references
+app.set('json replacer', (key: string, value: any) => {
+  if (key === 'parent' || key === 'previous') {
+    return '[Circular]';
+  }
+  return value;
+});
+
 // Middleware
 app.use(helmet());
 app.use(cors({

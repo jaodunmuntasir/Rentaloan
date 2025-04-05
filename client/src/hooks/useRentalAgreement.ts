@@ -20,6 +20,12 @@ interface RentalAgreementDetails {
   currentRentPaid: boolean;
   currentMonth?: number;
   lastPaidMonth?: number;
+  gracePeriod: number;
+  currentSecurityDeposit: string;
+  name?: string;
+  userRole?: string;
+  landlordDetails?: any;
+  renterDetails?: any;
 }
 
 export function useRentalAgreement(contractAddress?: string) {
@@ -70,50 +76,11 @@ export function useRentalAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Fetch rental details from API first
-      if (currentUser) {
-        try {
-          const apiResponse = await RentalApi.getRentalAgreementDetails(currentUser, contractAddress);
-          
-          if (apiResponse && apiResponse.success) {
-            const { agreement } = apiResponse;
-            
-            // Extract blockchain data if available, otherwise use database data
-            const onChain = agreement.onChain || {};
-            
-            // Convert to RentalAgreementDetails format
-            const landlordAddress = onChain.landlord || agreement.landlord?.walletAddress || '';
-            const tenantAddress = onChain.renter || agreement.renter?.walletAddress || '';
-            
-            setDetails({
-              landlord: landlordAddress,
-              tenant: tenantAddress,
-              propertyAddress: 'Property Address', // Placeholder
-              propertyNftId: '0', // Placeholder
-              rentAmount: onChain.baseRent || agreement.baseRent || '0',
-              securityDeposit: onChain.securityDeposit || agreement.securityDeposit || '0',
-              rentDuration: onChain.duration || agreement.duration || 0,
-              paymentInterval: 30, // Default to monthly
-              nextPaymentDate: new Date(), // Placeholder
-              isActive: onChain.status === 1 || agreement.status === 'ACTIVE',
-              securityDepositPaid: onChain.status !== 0,
-              currentRentPaid: false, // Placeholder
-              currentMonth: onChain.lastPaidMonth || 0,
-              lastPaidMonth: onChain.lastPaidMonth || 0
-            });
-            
-            return;
-          }
-        } catch (apiError) {
-          console.error("API error, falling back to blockchain:", apiError);
-          // Continue with blockchain call if API fails
-        }
-      }
-      
-      // Fallback to blockchain if API fails or user not logged in
+      // First, always try to get blockchain data as it's the source of truth
       const contract = rentalContract || await initialize(contractAddress);
       if (!contract) return;
       
+      let blockchainData = null;
       try {
         // Use getContractDetails() to get all data in one call
         const details = await contract.getContractDetails();
@@ -126,47 +93,29 @@ export function useRentalAgreement(contractAddress?: string) {
         const baseRentWei = details[4];
         const gracePeriodValue = Number(details[5]);
         const statusValue = Number(details[6]);
-        const currentSecurityDeposit = details[7];
+        const currentSecurityDepositWei = details[7];
         const lastPaidMonth = Number(details[8]);
         const dueAmount = details[9];
         
         // Format eth values
         const securityDeposit = ethers.formatEther(securityDepositWei);
         const rentAmount = ethers.formatEther(baseRentWei);
+        const currentSecurityDeposit = ethers.formatEther(currentSecurityDepositWei);
         
-        // Default values for properties not in contract
-        const propertyAddress = 'Property Address'; // Placeholder
-        const propertyNftId = '0'; // Placeholder
-        const paymentInterval = 30; // Monthly (30 days)
-        
-        // Determine status values
-        const isActive = statusValue === 1; // ACTIVE is 1
-        const securityDepositPaid = statusValue !== 0; // Not INITIALIZED (0)
-        
-        // Calculate next payment date based on last paid month
-        const nextPaymentDate = new Date();
-        if (lastPaidMonth >= 0) {
-          nextPaymentDate.setTime(
-            new Date().getTime() + ((lastPaidMonth + 1) * 30 * 24 * 60 * 60 * 1000)
-          );
-        }
-        
-        setDetails({
+        // Store the blockchain data
+        blockchainData = {
           landlord,
           tenant: renter,
-          propertyAddress,
-          propertyNftId,
-          rentAmount,
-          securityDeposit,
           rentDuration,
-          paymentInterval,
-          nextPaymentDate,
-          isActive,
-          securityDepositPaid,
-          currentRentPaid: lastPaidMonth > 0,
-          currentMonth: lastPaidMonth,
-          lastPaidMonth
-        });
+          securityDeposit,
+          rentAmount,
+          gracePeriod: gracePeriodValue,
+          status: statusValue,
+          currentSecurityDeposit,
+          lastPaidMonth,
+          dueAmount: ethers.formatEther(dueAmount)
+        };
+        
       } catch (contractErr) {
         console.error("Error fetching contract details:", contractErr);
         
@@ -179,26 +128,92 @@ export function useRentalAgreement(contractAddress?: string) {
           const baseRent = ethers.formatEther(await contract.getBaseRent());
           const status = Number(await contract.getContractStatus());
           
-          setDetails({
+          blockchainData = {
             landlord,
             tenant: renter,
-            propertyAddress: 'Property Address', // Placeholder
-            propertyNftId: '0', // Placeholder
-            rentAmount: baseRent,
-            securityDeposit,
             rentDuration,
-            paymentInterval: 30, // Default to monthly
-            nextPaymentDate: new Date(), // Placeholder
-            isActive: status === 1, // ACTIVE status
-            securityDepositPaid: status !== 0, // Not INITIALIZED
-            currentRentPaid: false, // Placeholder
-            currentMonth: 0,
-            lastPaidMonth: 0
-          });
+            securityDeposit,
+            rentAmount: baseRent,
+            status
+          };
         } catch (err) {
-          setError("Failed to read contract data: " + (err instanceof Error ? err.message : String(err)));
+          console.error("Failed to read individual contract data:", err);
         }
       }
+      
+      if (!blockchainData) {
+        setError("Failed to read blockchain data");
+        return;
+      }
+      
+      // Now get auxiliary data from API if user is logged in
+      let apiData = null;
+      if (currentUser) {
+        try {
+          const apiResponse = await RentalApi.getRentalAgreementDetails(currentUser, contractAddress);
+          
+          if (apiResponse && apiResponse.success) {
+            const { agreement } = apiResponse;
+            console.log("API data received:", agreement);
+            apiData = {
+              name: agreement.name,
+              userRole: agreement.userRole,
+              landlordDetails: agreement.landlord,
+              renterDetails: agreement.renter
+            };
+          }
+        } catch (apiError) {
+          console.warn("API error, using only blockchain data:", apiError);
+        }
+      }
+      
+      // Default values for properties not in contract
+      const propertyAddress = 'Property Address'; // Placeholder
+      const propertyNftId = '0'; // Placeholder
+      const paymentInterval = 30; // Monthly (30 days)
+      
+      // Determine status values
+      const isActive = blockchainData.status === 1; // ACTIVE is 1
+      const securityDepositPaid = blockchainData.status !== 0; // Not INITIALIZED (0)
+      
+      // Calculate next payment date based on last paid month
+      const nextPaymentDate = new Date();
+      if (blockchainData.lastPaidMonth !== undefined && blockchainData.lastPaidMonth >= 0) {
+        nextPaymentDate.setTime(
+          new Date().getTime() + ((blockchainData.lastPaidMonth + 1) * 30 * 24 * 60 * 60 * 1000)
+        );
+      }
+      
+      // Combine blockchain data (primary) with API data (auxiliary)
+      setDetails({
+        // Core blockchain data
+        landlord: blockchainData.landlord,
+        tenant: blockchainData.tenant,
+        propertyAddress,
+        propertyNftId,
+        rentAmount: blockchainData.rentAmount,
+        securityDeposit: blockchainData.securityDeposit,
+        rentDuration: blockchainData.rentDuration,
+        paymentInterval,
+        nextPaymentDate,
+        isActive,
+        securityDepositPaid,
+        currentRentPaid: (blockchainData.lastPaidMonth ?? 0) > 0,
+        currentMonth: blockchainData.lastPaidMonth ?? 0,
+        lastPaidMonth: blockchainData.lastPaidMonth ?? 0,
+        
+        // Additional blockchain data
+        gracePeriod: blockchainData.gracePeriod ?? Math.floor(Number(blockchainData.securityDeposit) / Number(blockchainData.rentAmount)),
+        currentSecurityDeposit: blockchainData.currentSecurityDeposit ?? blockchainData.securityDeposit,
+        
+        // Auxiliary information from API if available
+        ...(apiData && {
+          name: apiData.name,
+          userRole: apiData.userRole,
+          landlordDetails: apiData.landlordDetails,
+          renterDetails: apiData.renterDetails
+        })
+      });
     } catch (err: any) {
       setError(err.message || "Error loading rental details");
     } finally {
