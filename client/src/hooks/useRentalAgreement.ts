@@ -282,7 +282,11 @@ export function useRentalAgreement(contractAddress?: string) {
       // Get rent amount and any due amount
       const baseRent = await rentalContract.getBaseRent();
       const dueAmount = await rentalContract.dueAmount();
-      const totalAmount = baseRent.add(dueAmount);
+      
+      // Ensure values are treated as BigNumber objects
+      const baseRentBN = ethers.getBigInt(baseRent.toString());
+      const dueAmountBN = ethers.getBigInt(dueAmount.toString());
+      const totalAmount = baseRentBN + dueAmountBN;
       
       console.log(`Paying rent for month ${month}, amount: ${ethers.formatEther(totalAmount)} ETH`);
       
@@ -302,7 +306,8 @@ export function useRentalAgreement(contractAddress?: string) {
           currentUser,
           contractAddress,
           ethers.formatEther(totalAmount),
-          receipt.hash
+          receipt.hash,
+          month
         );
       }
       
@@ -344,7 +349,9 @@ export function useRentalAgreement(contractAddress?: string) {
       if (currentUser) {
         await RentalApi.skipRent(
           currentUser,
-          contractAddress
+          contractAddress,
+          month,
+          receipt.hash
         );
       }
       

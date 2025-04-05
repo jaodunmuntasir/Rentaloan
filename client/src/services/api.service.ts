@@ -148,8 +148,8 @@ export const RentalApi = {
   },
   
   // Skip rent payment
-  async skipRent(user: FirebaseUser | AppUser | null, address: string) {
-    return apiCall(`/api/rental/${address}/skip-rent`, 'POST', user);
+  async skipRent(user: FirebaseUser | AppUser | null, address: string, month: number, transactionHash: string) {
+    return apiCall(`/api/rental/${address}/skip-rent`, 'POST', user, { month, transactionHash });
   },
   
   // Extend rental agreement

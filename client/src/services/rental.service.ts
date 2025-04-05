@@ -58,20 +58,24 @@ export const RentalAgreementApi = {
     user: FirebaseUser | AppUser | null,
     address: string,
     amount: string,
-    transactionHash: string
+    transactionHash: string,
+    month: number
   ) {
     return apiCall(`/api/rental/${address}/pay-rent`, 'POST', user, { 
       amount, 
-      transactionHash 
+      transactionHash,
+      month
     });
   },
   
   // Skip rent payment
   async skipRent(
     user: FirebaseUser | AppUser | null,
-    address: string
+    address: string,
+    month: number,
+    transactionHash: string
   ) {
-    return apiCall(`/api/rental/${address}/skip-rent`, 'POST', user);
+    return apiCall(`/api/rental/${address}/skip-rent`, 'POST', user, { month, transactionHash });
   },
   
   // Extend rental agreement

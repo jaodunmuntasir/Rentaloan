@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import RentalAgreementDetails from '../../components/rental/RentalAgreementDetails';
 import PaySecurityDeposit from '../../components/rental/PaySecurityDeposit';
 import PayRent from '../../components/rental/PayRent';
-import SkipRent from '../../components/rental/SkipRent';
 import ExtendAgreement from '../../components/rental/ExtendAgreement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Separator } from '../../components/ui/separator';
@@ -12,7 +11,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useWallet } from '../../contexts/WalletContext';
 import { RentalAgreementApi } from '../../services/rental.service';
 import { Button } from '../../components/ui/button';
-import { ChevronLeft, HomeIcon, ShieldCheck, Coins, Calendar, ArrowRightLeft, Loader2 } from 'lucide-react';
+import { ChevronLeft, HomeIcon, ShieldCheck, Coins, Calendar, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 
@@ -110,7 +109,7 @@ const RentalDetail: React.FC = () => {
   
   // Update active tab to details if user isn't renter and tries to access renter-only tabs
   useEffect(() => {
-    const renterOnlyTabs = ['security', 'pay', 'skip'];
+    const renterOnlyTabs = ['security', 'pay'];
     if (!isRenter() && renterOnlyTabs.includes(activeTab)) {
       setActiveTab('details');
     }
@@ -171,7 +170,7 @@ const RentalDetail: React.FC = () => {
       <Separator className="my-6" />
       
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-2 md:grid-cols-5">
+        <TabsList className="grid grid-cols-2 md:grid-cols-4">
           <TabsTrigger value="details" className="flex items-center gap-2">
             <HomeIcon className="h-4 w-4" />
             <span className="hidden sm:inline">Details</span>
@@ -187,10 +186,6 @@ const RentalDetail: React.FC = () => {
               <TabsTrigger value="pay" className="flex items-center gap-2">
                 <Coins className="h-4 w-4" />
                 <span className="hidden sm:inline">Pay Rent</span>
-              </TabsTrigger>
-              <TabsTrigger value="skip" className="flex items-center gap-2">
-                <ArrowRightLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Skip Rent</span>
               </TabsTrigger>
             </>
           )}
@@ -236,24 +231,8 @@ const RentalDetail: React.FC = () => {
                   <PayRent 
                     contractAddress={address} 
                     onSuccess={handleActionSuccess}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            <TabsContent value="skip" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Skip Rent</CardTitle>
-                  <CardDescription>
-                    Request to skip a rent payment using your loan
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <SkipRent 
-                    rentalContractAddress={address} 
+                    showSkipOption={true}
                     loanContractAddress={demoLoanAddress}
-                    onSuccess={handleActionSuccess}
                   />
                 </CardContent>
               </Card>

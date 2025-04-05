@@ -36,7 +36,7 @@ This document provides a systematic checklist for manually testing all features 
   - [x] Landlord can view all their rental agreements
   - [ ] Landlord can filter agreements by status
   - [x] Rental agreement details show correct property information
-  - [ ] Landlord can see payment history for each agreement
+  - [x] Landlord can see payment history for each agreement
   - [ ] Landlord receives notification when tenant pays rent/deposit
 
 - [ ] **Extension Approval**
