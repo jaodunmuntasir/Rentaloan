@@ -237,6 +237,7 @@ export const LoanApi = {
     requestId: string;
     interestRate: number;
     offerAmount: string;
+    duration: number;
   }) => {
     try {
       const response = await api.post(
@@ -262,6 +263,35 @@ export const LoanApi = {
       return response.data;
     } catch (error) {
       console.error('Error accepting loan offer:', error);
+      throw error;
+    }
+  },
+
+  // Withdraw a loan offer (for lender)
+  withdrawLoanOffer: async (user: AppUser, offerId: string) => {
+    try {
+      const response = await api.post(
+        `/api/loan/offer/${offerId}/withdraw`, 
+        {}, 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error withdrawing loan offer:', error);
+      throw error;
+    }
+  },
+  
+  // Get offers made by a user
+  getUserOffers: async (user: AppUser) => {
+    try {
+      const response = await api.get(
+        '/api/loan/myoffers', 
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching user offers:', error);
       throw error;
     }
   },

@@ -76,39 +76,7 @@ const RequestCreate: React.FC = () => {
     
     return currentSecurityDeposit >= maxLoanAmount;
   };
-  
-  // Calculate estimated monthly payment based on loan parameters
-  const calculateMonthlyPayment = (): string => {
-    const principal = parseFloat(loanAmount);
-    const monthlyInterestRate = interestRate / 100 / 12;
-    const numberOfPayments = loanDuration;
-    
-    if (principal <= 0 || interestRate <= 0 || numberOfPayments <= 0) {
-      return '0';
-    }
-    
-    // Monthly payment formula: P * r * (1 + r)^n / ((1 + r)^n - 1)
-    const payment = 
-      principal * 
-      monthlyInterestRate * 
-      Math.pow(1 + monthlyInterestRate, numberOfPayments) / 
-      (Math.pow(1 + monthlyInterestRate, numberOfPayments) - 1);
-    
-    return payment.toFixed(6);
-  };
-  
-  // Calculate total repayment
-  const calculateTotalRepayment = (): string => {
-    const monthlyPayment = parseFloat(calculateMonthlyPayment());
-    return (monthlyPayment * loanDuration).toFixed(6);
-  };
-  
-  // Calculate total interest
-  const calculateTotalInterest = (): string => {
-    const principal = parseFloat(loanAmount);
-    const totalRepayment = parseFloat(calculateTotalRepayment());
-    return (totalRepayment - principal).toFixed(6);
-  };
+
   
   // Check if form is valid
   const isFormValid = (): boolean => {

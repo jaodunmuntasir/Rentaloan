@@ -3,19 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { LoanApi } from '../../services/api.service';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Card, CardContent, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { Input } from '../../components/ui/input';
 import {
-  Plus,
   Search,
-  Filter,
   CreditCard,
   ArrowUpDown,
   ChevronRight,
   Loader2,
-  Home,
   RefreshCw
 } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
@@ -108,42 +105,7 @@ const MyRequestsPage: React.FC = () => {
             setLoanRequests(response.loanRequests);
           }
         } else {
-          console.warn('No loan requests data in response, using mock data');
-          // Use mock data for development (remove in production)
-          const mockLoanRequests: LoanRequest[] = [
-            {
-              id: '1',
-              rentalAgreementId: '1',
-              rentalAgreement: {
-                contractAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-                name: 'Rental Agreement #1',
-                propertyAddress: '123 Main St, New York, NY',
-              },
-              amount: '2.5',
-              interestRate: 5.5,
-              duration: 12,
-              status: 'OPEN',
-              createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
-              offersCount: 2
-            },
-            {
-              id: '3',
-              rentalAgreementId: '3',
-              rentalAgreement: {
-                contractAddress: '0xcdefabcdefabcdefabcdefabcdefabcdefabcdef',
-                name: 'Rental Agreement #3',
-                propertyAddress: '789 Ocean Blvd, Miami, FL',
-              },
-              amount: '1.8',
-              interestRate: 6.0,
-              duration: 9,
-              status: 'OPEN',
-              createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
-              offersCount: 0
-            }
-          ];
-          
-          setLoanRequests(mockLoanRequests);
+          console.warn('No loan requests data available for the user');
         }
       } catch (err) {
         console.error("Error fetching loan requests:", err);
@@ -263,7 +225,6 @@ const MyRequestsPage: React.FC = () => {
     // Handle various possible data structures
     const contractAddress = request.rentalAgreement?.contractAddress || 'Unknown';
     const propertyName = request.rentalAgreement?.name || `Rental Agreement #${request.rentalAgreementId}`;
-    const propertyAddress = request.rentalAgreement?.propertyAddress || 'Unknown Address';
     
     // Format the creation date
     let createdDate = 'Unknown date';
@@ -275,16 +236,13 @@ const MyRequestsPage: React.FC = () => {
     
     return (
       <Card key={request.id} className="mb-4 hover:border-primary transition-colors">
-        <Link to={`/loan/request/${request.id}`} className="block">
+        <Link to={`/rental/${contractAddress}/loan/request/${request.id}`} className="block">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
               <div>
                 <h3 className="text-lg font-medium">
                   {propertyName}
                 </h3>
-                <p className="text-muted-foreground text-sm">
-                  {propertyAddress}
-                </p>
                 <p className="text-xs text-muted-foreground">
                   Contract: {formatAddress(contractAddress)}
                 </p>
@@ -360,10 +318,6 @@ const MyRequestsPage: React.FC = () => {
             Refresh
           </Button>
           
-          <Button onClick={() => navigate('/loan/request/create')} className="flex items-center">
-            <Plus className="h-4 w-4 mr-1" />
-            New Request
-          </Button>
         </div>
       </div>
       
@@ -433,13 +387,6 @@ const MyRequestsPage: React.FC = () => {
               <CreditCard className="h-6 w-6 text-primary" />
             </div>
             <CardTitle className="mb-2">No Loan Requests</CardTitle>
-            <CardDescription className="mx-auto max-w-md mb-4">
-              You haven't created any loan requests yet. Create a new loan request to start the process.
-            </CardDescription>
-            <Button onClick={() => navigate('/loan/request/create')} className="flex items-center mx-auto">
-              <Plus className="h-4 w-4 mr-1" />
-              Create Loan Request
-            </Button>
           </CardContent>
         </Card>
       )}

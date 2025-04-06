@@ -73,6 +73,7 @@ function App() {
                   <Route path="create" element={<RentalCreate />} />
                   <Route path=":address" element={<RentalDetail />} />
                   <Route path=":address/loan/request/create" element={<RequestCreate />} />
+                  <Route path=":address/loan/request/:id" element={<RequestDetail />} />
                 </Route>
                 
                 {/* Loan routes */}
@@ -83,7 +84,6 @@ function App() {
                   <Route path="requests" element={<RequestList />} />
                   <Route path="myrequests" element={<MyRequestsPage />} />
                   <Route path="request/create" element={<RequestCreate />} />
-                  <Route path="request/:address" element={<RequestDetail />} />
                 </Route>
               </Route>
               

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { CreditCard, Banknote, PlusCircle, FileText } from 'lucide-react';
+import { CreditCard, Banknote, FileText } from 'lucide-react';
 
 const Loan: React.FC = () => {
   const location = useLocation();
