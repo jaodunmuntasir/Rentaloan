@@ -244,7 +244,7 @@ const LoanRequestList: React.FC = () => {
   const renderLoanRequestCard = (request: LoanRequest) => {
     return (
       <Card key={request.id} className="mb-4 hover:border-primary transition-colors">
-        <Link to={`/rental/${request.rentalAddress}/loan/request/${request.address}`} className="block">
+        <Link to={`/loan/request/${request.address}`} className="block">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
               <div>

@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { LoanApi } from '../../services/api.service';
 import CreateLoanOffer from '../../components/loan/CreateLoanOffer';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
@@ -16,155 +16,170 @@ import {
   Calendar, 
   Clock, 
   CreditCard, 
-  GanttChart,
+  DollarSign,
   ArrowLeft,
-  X
+  CheckCircle,
+  XCircle,
+  AlertTriangle
 } from 'lucide-react';
+import { useRentalAgreement } from '../../hooks/useRentalAgreement';
+import { useToast } from '../../contexts/ToastContext';
+import { BlockchainService } from '../../services/blockchain.service';
 
 // Types
-interface LoanOffer {
+interface Lender {
   id: string;
-  lender: {
-    id: string;
-    name: string;
-  };
-  amount: string;
-  interestRate: number;
-  duration: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
-  createdAt: Date;
+  email: string;
+  walletAddress: string;
+  name?: string;
 }
 
-interface RentalDetails {
-  contractAddress: string;
-  propertyName: string;
-  propertyAddress: string;
-  landlord: {
-    id: string;
-    name: string;
-  };
-  renter: {
-    id: string;
-    name: string;
-  };
-  rentAmount: string;
-  securityDeposit: string;
-  rentDuration: number;
+interface LoanOffer {
+  id: string;
+  lenderId: string;
+  lender?: Lender;
+  interestRate: number;
+  duration: number;
+  status: string;
+  createdAt: string;
 }
 
 interface LoanRequest {
   id: string;
-  requester: {
-    id: string;
+  rentalAgreementId: string;
+  rentalAgreement?: {
+    contractAddress: string;
     name: string;
+    baseRent: string;
+    securityDeposit: string;
+    duration: number;
+    gracePeriod: number;
+    landlord?: {
+      id: string;
+      email: string;
+      walletAddress: string;
+    };
+    renter?: {
+      id: string;
+      email: string;
+      walletAddress: string;
+    };
   };
-  rentalAgreement: RentalDetails;
-  requestedAmount: string;
+  requesterId: string;
+  requester?: {
+    id: string;
+    email: string;
+    walletAddress: string;
+    name?: string;
+  };
+  amount: string;
+  duration: number;
   interestRate: number;
-  loanDuration: number;
-  status: 'open' | 'funded' | 'repaying' | 'closed' | 'defaulted';
-  createdAt: Date;
-  offers: LoanOffer[];
+  status: string;
+  createdAt: string;
 }
 
 const LoanRequestDetail: React.FC = () => {
-  const { contractAddress, id } = useParams<{ contractAddress: string; id: string }>();
+  // Get parameters from URL
+  const { address: rentalAddress, id: requestId } = useParams<{ address: string; id: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { showToast } = useToast();
+  
+  // Get rental agreement details directly from blockchain
+  const { details: rentalDetails, loading: rentalLoading, error: rentalError } = useRentalAgreement(rentalAddress || '');
   
   const [activeTab, setActiveTab] = useState('details');
   const [loading, setLoading] = useState(true);
   const [loanRequest, setLoanRequest] = useState<LoanRequest | null>(null);
+  const [loanOffers, setLoanOffers] = useState<LoanOffer[]>([]);
+  const [availableCollateral, setAvailableCollateral] = useState<string>('0');
   const [error, setError] = useState<string | null>(null);
-  const [userOffers, setUserOffers] = useState<LoanOffer[]>([]);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
   
+  // Helper function to determine if current user is the borrower
+  const isUserBorrower = (): boolean => {
+    if (!currentUser || !loanRequest) return false;
+    
+    // Check requester ID or email if available
+    if (loanRequest.requester) {
+      return loanRequest.requester.email === currentUser.email;
+    }
+    
+    return false;
+  };
+  
+  // Fetch collateral data from blockchain
+  useEffect(() => {
+    const fetchCollateralData = async () => {
+      if (!rentalAddress) return;
+      
+      try {
+        // Get available collateral info from blockchain
+        const collateralInfo = await BlockchainService.getAvailableCollateral(rentalAddress);
+        setAvailableCollateral(collateralInfo.availableAmount);
+      } catch (err) {
+        console.error("Error fetching collateral data:", err);
+        // Set a default value for availableCollateral to prevent UI issues
+        setAvailableCollateral('0');
+      }
+    };
+    
+    fetchCollateralData();
+  }, [rentalAddress]);
+  
+  // Fetch loan request details
   useEffect(() => {
     const fetchLoanRequest = async () => {
-      if (!id || !contractAddress) {
-        setError('Loan request ID and contract address are required');
+      if (!requestId) {
+        setError('Loan request ID is missing from URL parameters');
+        setLoading(false);
+        return;
+      }
+      
+      if (!currentUser) {
+        setError('You must be logged in to view loan request details');
         setLoading(false);
         return;
       }
       
       try {
         setLoading(true);
+        setError(null);
         
-        // In a real app, this would fetch from the API
-        // For now, using mock data
-        const mockLoanRequest: LoanRequest = {
-          id: id,
-          requester: {
-            id: '0x9876543210987654321098765432109876543210',
-            name: 'John Doe'
-          },
-          rentalAgreement: {
-            contractAddress: contractAddress,
-            propertyName: 'Luxury Apartment',
-          propertyAddress: '123 Main St, New York, NY',
-            landlord: {
-              id: '0x1234567890123456789012345678901234567890',
-              name: 'Property Owner LLC'
-            },
-            renter: {
-              id: '0x9876543210987654321098765432109876543210',
-              name: 'John Doe'
-            },
-            rentAmount: '0.5',
-            securityDeposit: '1.0',
-            rentDuration: 24
-          },
-          requestedAmount: '2.5',
-          interestRate: 5.5,
-          loanDuration: 12,
-          status: 'open',
-          createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-          offers: [
-            {
-              id: 'offer1',
-              lender: {
-                id: '0x1111111111111111111111111111111111111111',
-                name: 'Jane Smith'
-              },
-              amount: '2.0',
-              interestRate: 4.75,
-              duration: 12,
-              status: 'pending',
-              createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 days ago
-            },
-            {
-              id: 'offer2',
-              lender: {
-                id: '0x2222222222222222222222222222222222222222',
-                name: 'Alex Johnson'
-              },
-              amount: '2.5',
-              interestRate: 5.0,
-              duration: 10,
-              status: 'pending',
-              createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1 day ago
-            }
-          ]
+        // Convert Firebase User to App User
+        const appUser = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken(true) // Force token refresh
         };
         
-        setLoanRequest(mockLoanRequest);
+        console.log('Fetching loan request with ID:', requestId);
         
-        // Filter out offers made by the current user
-        if (currentUser) {
-          const currentUserOffers = mockLoanRequest.offers.filter(
-            offer => offer.lender.id === currentUser.uid
-          );
-          setUserOffers(currentUserOffers);
+        // Fetch loan request details from API
+        const response = await LoanApi.getLoanRequest(appUser, requestId);
+        
+        if (response && response.success && response.loanRequest) {
+          setLoanRequest(response.loanRequest);
+          setLoanOffers(response.loanOffers || []);
+          // We'll get availableCollateral from blockchain directly
+        } else {
+          const errorMessage = response.error || 'Failed to load loan request data';
+          console.error('Loan request fetch failed:', errorMessage);
+          setError(errorMessage);
         }
-      } catch (err) {
-        console.error("Error fetching loan request:", err);
-        setError('Failed to load loan request details');
+      } catch (err: any) {
+        console.error("Unexpected error fetching loan request:", err);
+        setError(err.message || 'An unexpected error occurred while fetching loan request details');
       } finally {
         setLoading(false);
       }
     };
     
     fetchLoanRequest();
-  }, [id, contractAddress, currentUser]);
+  }, [requestId, currentUser]);
   
   // Calculate monthly payment for a given interest rate and duration
   const calculateMonthlyPayment = (amount: string, interestRate: number, duration: number): string => {
@@ -186,14 +201,49 @@ const LoanRequestDetail: React.FC = () => {
     return payment.toFixed(6);
   };
   
+  // Calculate maximum loan amount based on the dueAmount plus current month's rent (same as RequestCreate)
+  const calculateMaxLoanAmount = (): string => {
+    if (!rentalDetails || (!rentalDetails.dueAmount && !rentalDetails.rentAmount)) return '0';
+    
+    // Add the due amount and the current month's base rent
+    const dueAmount = parseFloat(rentalDetails.dueAmount || '0');
+    const baseRent = parseFloat(rentalDetails.rentAmount || '0');
+    const maxAmount = dueAmount + baseRent;
+    
+    return maxAmount.toString();
+  };
+  
+  // Calculate remaining rental duration minus 1 (same as RequestCreate)
+  const calculateRemainingDuration = (): number => {
+    if (!rentalDetails || !rentalDetails.rentDuration || rentalDetails.lastPaidMonth === undefined) return 0;
+    
+    // Remaining duration is total duration minus last paid month minus 1
+    const remainingMonths = Math.max(0, rentalDetails.rentDuration - rentalDetails.lastPaidMonth - 1);
+    
+    return remainingMonths;
+  };
+
+  // Check if the security deposit is sufficient for the requested loan amount (same as RequestCreate)
+  const isSecurityDepositSufficient = (loanAmount: string): boolean => {
+    if (!rentalDetails || !rentalDetails.currentSecurityDeposit) return false;
+    
+    const currentSecurityDeposit = parseFloat(rentalDetails.currentSecurityDeposit);
+    const requestedAmount = parseFloat(loanAmount);
+    
+    return currentSecurityDeposit >= requestedAmount;
+  };
+  
   // Format address for display (e.g. 0x1234...5678)
   const formatAddress = (address: string) => {
-    if (!address) return '';
+    if (!address) return 'Unknown';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
   
   // Format time from now (e.g. "3 days ago")
-  const formatTimeFromNow = (date: Date) => {
+  const formatTimeFromNow = (dateString: string) => {
+    if (!dateString) return 'Unknown date';
+    
+    const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -208,150 +258,168 @@ const LoanRequestDetail: React.FC = () => {
   };
   
   // Get status badge
-  const getStatusBadge = (status: LoanRequest['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'open':
+      case 'OPEN':
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Open</Badge>;
-      case 'funded':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Funded</Badge>;
-      case 'repaying':
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Repaying</Badge>;
-      case 'closed':
+      case 'MATCHED':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Matched</Badge>;
+      case 'FULFILLED':
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Fulfilled</Badge>;
+      case 'CLOSED':
         return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Closed</Badge>;
-      case 'defaulted':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Defaulted</Badge>;
+      case 'CANCELLED':
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Cancelled</Badge>;
+      case 'PENDING':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
+      case 'ACCEPTED':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Accepted</Badge>;
+      case 'REJECTED':
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Rejected</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
   };
   
-  // Check if current user is the borrower
-  const isUserBorrower = (): boolean => {
-    if (!currentUser || !loanRequest) return false;
-    return currentUser.uid === loanRequest.requester.id;
-  };
-  
   // Handle offer submission
-  const handleOfferSubmit = async (offerAmount: string, interestRate: number, duration: number) => {
-    if (!loanRequest || !currentUser) return;
+  const handleOfferSubmit = async (interestRate: number, duration: number, amount: string) => {
+    if (!currentUser || !loanRequest) return;
     
     try {
-      console.log('Submitting offer:', { offerAmount, interestRate, duration });
+      setProcessingAction('submitting-offer');
       
-      // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-      // Create a new offer
-      const newOffer: LoanOffer = {
-        id: `offer${loanRequest.offers.length + 1}`,
-        lender: {
-          id: currentUser.uid,
-          name: currentUser.displayName || 'Anonymous'
-        },
-        amount: offerAmount,
-        interestRate,
-        duration,
-        status: 'pending',
-        createdAt: new Date()
+      // Convert Firebase User to App User
+      const appUser = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
       };
       
-      // Update loan request with new offer
-      setLoanRequest({
-        ...loanRequest,
-        offers: [...loanRequest.offers, newOffer]
+      // Submit offer via API
+      const response = await LoanApi.createLoanOffer(appUser, {
+        requestId: loanRequest.id,
+        interestRate,
+        offerAmount: amount
       });
       
-      // Add to user's offers
-      setUserOffers([...userOffers, newOffer]);
-      
-      // Switch to offers tab to show the new offer
-      setActiveTab('offers');
+      if (response && response.loanOffer) {
+        // Refresh offers by refetching the loan request
+        const updatedData = await LoanApi.getLoanRequest(appUser, loanRequest.id);
+        setLoanOffers(updatedData.loanOffers || []);
+        
+        showToast('Loan offer created successfully!', 'success');
+        // Switch to offers tab to show the new offer
+        setActiveTab('offers');
+      } else {
+        showToast('Failed to create loan offer', 'error');
+      }
     } catch (err) {
-      console.error("Error creating offer:", err);
-      setError('Failed to create loan offer');
+      console.error("Error creating loan offer:", err);
+      showToast('Failed to create loan offer', 'error');
+    } finally {
+      setProcessingAction(null);
     }
   };
   
   // Handle accept offer
   const handleAcceptOffer = async (offerId: string) => {
-    if (!loanRequest) return;
+    if (!currentUser || !loanRequest) return;
     
     try {
-    console.log('Accepting offer:', offerId);
-    
-      // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-      // Update all offers to rejected except the accepted one
-    const updatedOffers = loanRequest.offers.map(offer => {
-      if (offer.id === offerId) {
-        return { ...offer, status: 'accepted' as const };
-      } else {
-        return { ...offer, status: 'rejected' as const };
-      }
-    });
-    
-    // Update loan request
-    setLoanRequest({
-      ...loanRequest,
-      status: 'funded',
-      offers: updatedOffers
-    });
+      setProcessingAction(`accepting-${offerId}`);
       
-      // Update user offers
-      const updatedUserOffers = userOffers.map(offer => {
-        if (offer.id === offerId) {
-          return { ...offer, status: 'accepted' as const };
-        } else {
-          return { ...offer, status: 'rejected' as const };
-        }
-      });
-      setUserOffers(updatedUserOffers);
+      // Convert Firebase User to App User
+      const appUser = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
+      
+      // Accept offer via API
+      const response = await LoanApi.acceptLoanOffer(appUser, offerId);
+      
+      if (response && response.loanAgreement) {
+        showToast('Loan offer accepted successfully!', 'success');
+        
+        // Navigate to the loan agreement details
+        navigate(`/loan/agreement/${response.loanAgreement.contractAddress}`);
+      } else {
+        showToast('Failed to accept loan offer', 'error');
+        
+        // Refresh data
+        const updatedData = await LoanApi.getLoanRequest(appUser, loanRequest.id);
+        setLoanRequest(updatedData.loanRequest);
+        setLoanOffers(updatedData.loanOffers || []);
+      }
     } catch (err) {
-      console.error("Error accepting offer:", err);
-      setError('Failed to accept loan offer');
+      console.error("Error accepting loan offer:", err);
+      showToast('Failed to accept loan offer', 'error');
+    } finally {
+      setProcessingAction(null);
     }
   };
   
   // Handle withdraw offer
   const handleWithdrawOffer = async (offerId: string) => {
-    if (!loanRequest) return;
+    if (!currentUser) return;
     
     try {
-      console.log('Withdrawing offer:', offerId);
+      setProcessingAction(`withdrawing-${offerId}`);
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Convert Firebase User to App User
+      const appUser = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
       
-      // Update the specific offer to withdrawn
-      const updatedOffers = loanRequest.offers.map(offer => {
-        if (offer.id === offerId) {
-          return { ...offer, status: 'withdrawn' as const };
-        }
-        return offer;
-      });
+      // Withdraw offer via API
+      const response = await LoanApi.withdrawLoanOffer(appUser, offerId);
       
-      // Update loan request
-      setLoanRequest({
-        ...loanRequest,
-        offers: updatedOffers
-      });
-      
-      // Update user offers
-      const updatedUserOffers = userOffers.map(offer => {
-        if (offer.id === offerId) {
-          return { ...offer, status: 'withdrawn' as const };
-        }
-        return offer;
-      });
-      setUserOffers(updatedUserOffers);
+      if (response && response.success) {
+        showToast('Loan offer withdrawn successfully!', 'success');
+        
+        // Refresh data
+        const updatedData = await LoanApi.getLoanRequest(appUser, loanRequest!.id);
+        setLoanOffers(updatedData.loanOffers || []);
+      } else {
+        showToast('Failed to withdraw loan offer', 'error');
+      }
     } catch (err) {
-      console.error("Error withdrawing offer:", err);
-      setError('Failed to withdraw loan offer');
+      console.error("Error withdrawing loan offer:", err);
+      showToast('Failed to withdraw loan offer', 'error');
+    } finally {
+      setProcessingAction(null);
     }
   };
   
-  if (loading) {
+  // Check if user has already made an offer
+  const userHasOffer = (): boolean => {
+    if (!currentUser || !loanOffers.length) return false;
+    
+    return loanOffers.some(offer => 
+      offer.lender?.email === currentUser.email || 
+      offer.lender?.id === currentUser.uid
+    );
+  };
+  
+  // Get user's offer
+  const getUserOffer = () => {
+    if (!currentUser || !loanOffers.length) return null;
+    
+    return loanOffers.find(offer => 
+      offer.lender?.email === currentUser.email || 
+      offer.lender?.id === currentUser.uid
+    );
+  };
+  
+  if (loading || rentalLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-64">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -363,9 +431,44 @@ const LoanRequestDetail: React.FC = () => {
   if (error || !loanRequest) {
     return (
       <Alert variant="destructive" className="max-w-3xl mx-auto">
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>
-          {error || 'Failed to load loan request details'}
+        <AlertTitle>Error Loading Loan Request</AlertTitle>
+        <AlertDescription className="space-y-4">
+          <p>{error || 'Failed to load loan request details'}</p>
+          
+          <div className="bg-gray-100 p-4 rounded-md text-sm my-4">
+            <p className="font-semibold">Troubleshooting Information:</p>
+            <ul className="list-disc pl-5 space-y-1 mt-2">
+              <li>Loan Request ID: {requestId}</li>
+              <li>Rental Address: {rentalAddress}</li>
+              <li>User Logged In: {currentUser ? 'Yes' : 'No'}</li>
+              <li>Blockchain Data Loading: {rentalLoading ? 'In Progress' : (rentalDetails ? 'Successful' : 'Failed')}</li>
+            </ul>
+            
+            <p className="mt-4">Please try the following:</p>
+            <ul className="list-disc pl-5 space-y-1 mt-2">
+              <li>Refresh the page</li>
+              <li>Check that the loan request exists and is associated with this rental address</li>
+              <li>Verify your permissions to access this loan request</li>
+            </ul>
+          </div>
+          
+          <div className="flex justify-between mt-4">
+            <Button
+              variant="outline"
+              onClick={() => navigate(-1)}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Go Back
+            </Button>
+            
+            <Button
+              variant="default"
+              onClick={() => window.location.reload()}
+            >
+              <Loader2 className="mr-2 h-4 w-4" />
+              Refresh Page
+            </Button>
+          </div>
         </AlertDescription>
       </Alert>
     );
@@ -373,169 +476,187 @@ const LoanRequestDetail: React.FC = () => {
   
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/loan/myrequests')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Loan Requests
-        </Button>
-      </div>
-      
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            Loan Request {getStatusBadge(loanRequest.status)}
-          </h1>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="mb-2"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          
+          <h1 className="text-3xl font-bold tracking-tight">Loan Request Details</h1>
           <p className="text-muted-foreground mt-1">
-            Posted {formatTimeFromNow(loanRequest.createdAt)} · ID: {formatAddress(loanRequest.id)}
+            {loanRequest.rentalAgreement?.name || rentalDetails?.name || `Rental Agreement #${loanRequest.rentalAgreementId}`} - {getStatusBadge(loanRequest.status)}
           </p>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-2xl font-bold">{loanRequest.requestedAmount} ETH</span>
-          <span className="text-muted-foreground">Preferred rate: {loanRequest.interestRate}%</span>
-        </div>
       </div>
       
-      <Tabs defaultValue="details" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full" style={{ gridTemplateColumns: isUserBorrower() ? '1fr 1fr' : 'repeat(3, 1fr)' }}>
-          <TabsTrigger value="details">Loan Details</TabsTrigger>
-          {isUserBorrower() && (
-          <TabsTrigger value="offers">
-              Offers ({loanRequest.offers.filter(o => o.status === 'pending').length})
-          </TabsTrigger>
-          )}
-          {!isUserBorrower() && (
-            <>
-              <TabsTrigger value="offers">All Offers</TabsTrigger>
-              <TabsTrigger value="makeOffer" disabled={loanRequest.status !== 'open'}>
-            Make an Offer
-          </TabsTrigger>
-            </>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="terms">Loan Terms</TabsTrigger>
+          {isUserBorrower() ? (
+            <TabsTrigger value="offers">Offers</TabsTrigger>
+          ) : (
+            <TabsTrigger value="make-offer">Make an Offer</TabsTrigger>
           )}
         </TabsList>
         
-        {/* Details Tab */}
-        <TabsContent value="details" className="space-y-6 mt-6">
-          {/* Rental Agreement Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Home className="h-5 w-5 mr-2" /> Rental Agreement
-              </CardTitle>
-              <CardDescription>Details of the associated rental contract</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TabsContent value="details" className="space-y-4 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Home className="h-5 w-5 mr-2" /> Rental Agreement Details
+                </CardTitle>
+                <CardDescription>
+                  Details of the associated rental agreement
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Property</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.propertyName}</p>
-                  <p className="text-sm">{loanRequest.rentalAgreement.propertyAddress}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Contract Address</h3>
-                  <p className="font-mono text-sm">{loanRequest.rentalAgreement.contractAddress}</p>
-                </div>
-              </div>
-              <Separator />
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Rent Amount</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.rentAmount} ETH/month</p>
-                </div>
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Security Deposit</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.securityDeposit} ETH</p>
-                </div>
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Rental Duration</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.rentDuration} months</p>
-                </div>
-              </div>
-              <Separator />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Landlord</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.landlord.name}</p>
-                  <p className="font-mono text-xs">{formatAddress(loanRequest.rentalAgreement.landlord.id)}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm text-muted-foreground mb-1">Renter (Borrower)</h3>
-                  <p className="font-medium">{loanRequest.rentalAgreement.renter.name}</p>
-                  <p className="font-mono text-xs">{formatAddress(loanRequest.rentalAgreement.renter.id)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          
-          {/* Loan Request Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CreditCard className="h-5 w-5 mr-2" /> Loan Request Details
-              </CardTitle>
-              <CardDescription>Information about this loan request</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Borrower Information */}
-                <div className="space-y-4">
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <User className="h-4 w-4 mr-2 text-muted-foreground" /> Borrower Information
-                    </h3>
-                    <p className="mb-1">Name: {loanRequest.requester.name}</p>
-                    <p className="font-mono text-sm">ID: {formatAddress(loanRequest.requester.id)}</p>
+                  <h4 className="text-sm font-medium mb-2">Rental Agreement</h4>
+                  <div className="flex items-center">
+                    <Home className="h-5 w-5 mr-2 text-muted-foreground" />
+                    <span>
+                      {rentalDetails ? 
+                        `${rentalDetails.name || 'Rental Agreement'} (${formatAddress(rentalAddress || '')})` : 
+                        formatAddress(rentalAddress || '')}
+                    </span>
                   </div>
                 </div>
                 
-                {/* Loan Terms */}
-                <div className="space-y-4">
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <Calendar className="h-4 w-4 mr-2 text-muted-foreground" /> Loan Terms
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Loan Amount:</span>
-                        <span className="font-medium">{loanRequest.requestedAmount} ETH</span>
+                {/* Blockchain rental details - Use data directly from blockchain */}
+                {rentalDetails && (
+                  <div className="mt-6 space-y-4">
+                    <h4 className="font-medium">Rental Agreement Details</h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Rent Amount:</span>
+                          <span className="font-medium">{rentalDetails.rentAmount} ETH</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Current Security Deposit:</span>
+                          <span className="font-medium">{rentalDetails.currentSecurityDeposit} ETH</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Possible Collateral:</span>
+                          <span className="font-medium">{rentalDetails.currentSecurityDeposit} ETH</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Preferred Interest:</span>
-                        <span className="font-medium">{loanRequest.interestRate}%</span>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Due Amount:</span>
+                          <span className="font-medium">{loanRequest.amount} ETH</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Possible Loan Duration:</span>
+                          <span className="font-medium">{calculateRemainingDuration()} months</span>
+                        </div>
                       </div>
+                    </div>
+                    
+                    <div className="mt-4">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Requested Duration:</span>
-                        <span className="font-medium">{loanRequest.loanDuration} months</span>
-                      </div>
-                      <Separator className="my-1" />
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Est. Monthly Payment:</span>
-                        <span className="font-medium">
-                          {calculateMonthlyPayment(
-                            loanRequest.requestedAmount, 
-                            loanRequest.interestRate,
-                            loanRequest.loanDuration
-                          )} ETH
+                        <span className="text-sm text-muted-foreground">Security Deposit Sufficient:</span>
+                        <span className={`font-medium ${isSecurityDepositSufficient(loanRequest?.amount || '0') ? 'text-green-600' : 'text-red-600'}`}>
+                          {isSecurityDepositSufficient(loanRequest?.amount || '0') ? 'Yes' : 'No'}
                         </span>
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <Clock className="h-4 w-4 mr-2 text-muted-foreground" /> Status & Timing
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Current Status:</span>
-                        <span>{getStatusBadge(loanRequest.status)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Created:</span>
-                        <span className="font-medium">{loanRequest.createdAt.toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Offer Count:</span>
-                        <span className="font-medium">{loanRequest.offers.length}</span>
-                      </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <User className="h-5 w-5 mr-2" /> Borrower Information
+                </CardTitle>
+                <CardDescription>
+                  Details of the loan requester
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium">Email</p>
+                  <p className="text-sm text-muted-foreground">
+                    {loanRequest.requester?.email || 'Unknown'}
+                  </p>
+                </div>
+                
+                <div>
+                  <p className="text-sm font-medium">Wallet Address</p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatAddress(loanRequest.requester?.walletAddress || '')}
+                  </p>
+                </div>
+                
+                <div>
+                  <p className="text-sm font-medium">Request Date</p>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(loanRequest.createdAt).toLocaleDateString()} ({formatTimeFromNow(loanRequest.createdAt)})
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="terms" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <CreditCard className="h-5 w-5 mr-2" /> Loan Terms
+              </CardTitle>
+              <CardDescription>
+                Financial details of the loan request
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm font-medium">Requested Amount</p>
+                  <p className="text-xl font-semibold">{loanRequest.amount} ETH</p>
+                </div>
+                
+                <div>
+                  <p className="text-sm font-medium">Duration</p>
+                  <p className="text-xl font-semibold">{loanRequest.duration} months</p>
+                </div>
+                
+                <div>
+                  <p className="text-sm font-medium">Interest Rate</p>
+                  <p className="text-xl font-semibold">{loanRequest.interestRate}%</p>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              <div>
+                <p className="text-sm font-medium mb-2">Loan Terms</p>
+                <div className="bg-muted p-4 rounded-md">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Estimated Monthly Payment</p>
+                      <p className="font-medium">
+                        {calculateMonthlyPayment(loanRequest.amount, loanRequest.interestRate, loanRequest.duration)} ETH
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Payment</p>
+                      <p className="font-medium">
+                        {(parseFloat(loanRequest.amount) * (1 + loanRequest.interestRate / 100)).toFixed(6)} ETH
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -544,286 +665,175 @@ const LoanRequestDetail: React.FC = () => {
           </Card>
         </TabsContent>
         
-        {/* Offers Tab */}
-        <TabsContent value="offers" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <GanttChart className="h-5 w-5 mr-2" /> Loan Offers
-              </CardTitle>
-              <CardDescription>
-                {loanRequest.offers.length === 0 
-                  ? 'No offers have been made for this loan request yet' 
-                  : `${loanRequest.offers.length} offer${loanRequest.offers.length !== 1 ? 's' : ''} received`
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {loanRequest.offers.length === 0 ? (
-                <div className="text-center p-6 text-muted-foreground">
-                  <p>No loan offers yet.</p>
-                  {loanRequest.status === 'open' && !isUserBorrower() && (
-                    <Button 
-                      variant="outline" 
-                      className="mt-4"
-                      onClick={() => setActiveTab('makeOffer')}
-                    >
-                      Be the first to make an offer
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {loanRequest.offers
-                    .filter(offer => {
-                      // For borrowers show all offers
-                      // For others, only show accepted/rejected offers (not pending)
-                      return isUserBorrower() || offer.status !== 'pending';
-                    })
-                    .map(offer => (
-                    <Card key={offer.id} className={`
-                      overflow-hidden border-2
-                      ${offer.status === 'accepted' ? 'border-green-500' : ''}
-                      ${offer.status === 'rejected' ? 'border-red-200' : ''}
-                      ${offer.status === 'withdrawn' ? 'border-gray-200' : ''}
-                    `}>
-                      <div className="p-4">
-                        <div className="flex flex-col md:flex-row justify-between mb-3">
-                          <div>
-                            <h3 className="font-semibold flex items-center gap-2">
-                              Offer from {offer.lender.name || formatAddress(offer.lender.id)}
-                              {offer.status === 'accepted' && (
-                                <Badge className="bg-green-100 text-green-800 border-green-200">Accepted</Badge>
-                              )}
-                              {offer.status === 'rejected' && (
-                                <Badge className="bg-red-100 text-red-800 border-red-200">Rejected</Badge>
-                              )}
-                              {offer.status === 'withdrawn' && (
-                                <Badge className="bg-gray-100 text-gray-800 border-gray-200">Withdrawn</Badge>
-                              )}
-                              {offer.status === 'pending' && (
-                                <Badge className="bg-blue-100 text-blue-800 border-blue-200">Pending</Badge>
-                              )}
-                            </h3>
-                            <p className="text-sm text-muted-foreground">
-                              Made {formatTimeFromNow(offer.createdAt)}
-                            </p>
-                          </div>
-                          <div className="mt-2 md:mt-0 md:text-right">
-                            <p className="font-medium">Amount: {offer.amount} ETH</p>
-                            <p className="font-medium">{offer.interestRate}% interest rate</p>
-                            <p className="text-sm text-muted-foreground">{offer.duration} month term</p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 mb-3">
-                          <div className="flex-1 bg-muted rounded-md px-3 py-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Monthly Payment:</span>
-                              <span className="font-medium">
-                                {calculateMonthlyPayment(
-                                  offer.amount, 
-                                  offer.interestRate,
-                                  offer.duration
-                                )} ETH
-                              </span>
-                            </div>
-                          </div>
-                          <div className="flex-1 bg-muted rounded-md px-3 py-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Total Repayment:</span>
-                              <span className="font-medium">
-                                {(parseFloat(calculateMonthlyPayment(
-                                  offer.amount, 
-                                  offer.interestRate,
-                                  offer.duration
-                                )) * offer.duration).toFixed(6)} ETH
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Actions for borrower */}
-                        {isUserBorrower() && loanRequest.status === 'open' && offer.status === 'pending' && (
-                          <div className="flex justify-end gap-2 mt-3">
-                            <Button 
-                              variant="default"
-                              onClick={() => handleAcceptOffer(offer.id)}
-                            >
-                              Accept Offer
-                            </Button>
-                          </div>
-                        )}
-                        
-                        {/* Actions for lender - only shown if this is the user's offer */}
-                        {!isUserBorrower() && 
-                          currentUser && 
-                          offer.lender.id === currentUser.uid && 
-                          offer.status === 'pending' && (
-                          <div className="flex justify-end gap-2 mt-3">
-                            <Button 
-                              variant="outline"
-                              onClick={() => handleWithdrawOffer(offer.id)}
-                            >
-                              <X className="h-4 w-4 mr-1" /> Withdraw Offer
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {/* Make Offer Tab */}
-        <TabsContent value="makeOffer" className="space-y-6 mt-6">
-          {loanRequest.status !== 'open' ? (
-            <Alert>
-              <AlertTitle>This loan request is no longer open</AlertTitle>
-              <AlertDescription>
-                You cannot make an offer on a loan request that has been funded or closed.
-              </AlertDescription>
-            </Alert>
-          ) : isUserBorrower() ? (
-            <Alert>
-              <AlertTitle>Cannot make an offer on your own loan request</AlertTitle>
-              <AlertDescription>
-                You cannot make an offer on a loan request that you created.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <>
-              {/* Make an Offer Section */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2" /> Make a Loan Offer
-                  </CardTitle>
-                  <CardDescription>
-                    Offer to lend ETH to this borrower with your terms
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-            <CreateLoanOffer 
-                    loanRequestAddress={loanRequest.id}
-                    loanAmount={loanRequest.requestedAmount}
-              borrowerPreferredRate={loanRequest.interestRate}
-              borrowerRequestedDuration={loanRequest.loanDuration}
-                    onSubmit={(interestRate, duration) => 
-                      handleOfferSubmit(
-                        // Can be less than requested but not more
-                        loanRequest.requestedAmount, 
-                        interestRate, 
-                        duration
-                      )
-                    }
-                    maxLoanAmount={loanRequest.requestedAmount}
-                    maxDuration={loanRequest.loanDuration}
-                    maxInterestRate={35}
-                  />
-                </CardContent>
-              </Card>
-              
-              {/* Your Made Offers Section */}
-              {userOffers.length > 0 && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <GanttChart className="h-5 w-5 mr-2" /> Your Made Offers
-                    </CardTitle>
-                    <CardDescription>
-                      Offers you have made for this loan request
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {userOffers.map(offer => (
-                        <Card key={offer.id} className={`
-                          overflow-hidden border
-                          ${offer.status === 'accepted' ? 'border-green-500' : ''}
-                          ${offer.status === 'rejected' ? 'border-red-200' : ''}
-                          ${offer.status === 'withdrawn' ? 'border-gray-200' : ''}
-                        `}>
-                          <div className="p-4">
-                            <div className="flex flex-col md:flex-row justify-between mb-3">
-                              <div>
-                                <h3 className="font-semibold flex items-center gap-2">
-                                  Your Offer
-                                  {offer.status === 'accepted' && (
-                                    <Badge className="bg-green-100 text-green-800 border-green-200">Accepted</Badge>
-                                  )}
-                                  {offer.status === 'rejected' && (
-                                    <Badge className="bg-red-100 text-red-800 border-red-200">Rejected</Badge>
-                                  )}
-                                  {offer.status === 'withdrawn' && (
-                                    <Badge className="bg-gray-100 text-gray-800 border-gray-200">Withdrawn</Badge>
-                                  )}
-                                  {offer.status === 'pending' && (
-                                    <Badge className="bg-blue-100 text-blue-800 border-blue-200">Pending</Badge>
-                                  )}
-                                </h3>
-                                <p className="text-sm text-muted-foreground">
-                                  Made {formatTimeFromNow(offer.createdAt)}
-                                </p>
-                              </div>
-                              <div className="mt-2 md:mt-0 md:text-right">
-                                <p className="font-medium">Amount: {offer.amount} ETH</p>
-                                <p className="font-medium">{offer.interestRate}% interest rate</p>
-                                <p className="text-sm text-muted-foreground">{offer.duration} month term</p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="flex-1 bg-muted rounded-md px-3 py-2">
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-muted-foreground">Monthly Payment:</span>
-                                  <span className="font-medium">
-                                    {calculateMonthlyPayment(
-                                      offer.amount, 
-                                      offer.interestRate,
-                                      offer.duration
-                                    )} ETH
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex-1 bg-muted rounded-md px-3 py-2">
-                                <div className="flex justify-between text-sm">
-                                  <span className="text-muted-foreground">Total Repayment:</span>
-                                  <span className="font-medium">
-                                    {(parseFloat(calculateMonthlyPayment(
-                                      offer.amount, 
-                                      offer.interestRate,
-                                      offer.duration
-                                    )) * offer.duration).toFixed(6)} ETH
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Allow withdrawal only if pending */}
-                            {offer.status === 'pending' && (
-                              <div className="flex justify-end gap-2 mt-3">
-                                <Button 
-                                  variant="outline"
-                                  onClick={() => handleWithdrawOffer(offer.id)}
-                                >
-                                  <X className="h-4 w-4 mr-1" /> Withdraw Offer
-                                </Button>
-                              </div>
+        {isUserBorrower() ? (
+          <TabsContent value="offers" className="space-y-4 pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2" /> Loan Offers
+                </CardTitle>
+                <CardDescription>
+                  Offers from lenders for your loan request
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loanOffers.length === 0 ? (
+                  <div className="text-center p-6">
+                    <p className="text-muted-foreground">No offers yet. Check back later.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {loanOffers.map(offer => (
+                      <Card key={offer.id} className={`border ${offer.status === 'ACCEPTED' ? 'border-green-500' : ''}`}>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-lg">
+                            Offer from {offer.lender?.email || formatAddress(offer.lender?.walletAddress || '')}
+                            {offer.status === 'ACCEPTED' && (
+                              <Badge className="ml-2 bg-green-100 text-green-800">Accepted</Badge>
                             )}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-2">
+                          <div className="grid grid-cols-3 gap-4 mb-4">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Interest Rate</p>
+                              <p className="font-medium">{offer.interestRate}%</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Duration</p>
+                              <p className="font-medium">{offer.duration} months</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Monthly Payment</p>
+                              <p className="font-medium">
+                                {calculateMonthlyPayment(loanRequest.amount, offer.interestRate, offer.duration)} ETH
+                              </p>
+                            </div>
                           </div>
-                        </Card>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
-        </TabsContent>
+                          <div className="text-xs text-muted-foreground">
+                            Offered {formatTimeFromNow(offer.createdAt)}
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-2">
+                          {offer.status === 'PENDING' && loanRequest.status === 'OPEN' && (
+                            <Button
+                              onClick={() => handleAcceptOffer(offer.id)}
+                              className="w-full"
+                              disabled={processingAction !== null}
+                            >
+                              {processingAction === `accepting-${offer.id}` ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Accept Offer
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </CardFooter>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ) : (
+          <TabsContent value="make-offer" className="space-y-4 pt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <DollarSign className="h-5 w-5 mr-2" /> Make a Loan Offer
+                </CardTitle>
+                <CardDescription>
+                  Provide loan terms to the borrower
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {userHasOffer() ? (
+                  <div className="space-y-4">
+                    <Alert>
+                      <AlertTitle className="flex items-center">
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        You have already made an offer
+                      </AlertTitle>
+                      <AlertDescription>
+                        You have already submitted an offer for this loan request. You cannot edit your offer, but you can withdraw it if it hasn't been accepted yet.
+                      </AlertDescription>
+                    </Alert>
+                    
+                    {getUserOffer() && (
+                      <Card className="border border-muted">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-lg">Your Offer</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-2">
+                          <div className="grid grid-cols-3 gap-4 mb-4">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Interest Rate</p>
+                              <p className="font-medium">{getUserOffer()?.interestRate}%</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Duration</p>
+                              <p className="font-medium">{getUserOffer()?.duration} months</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Status</p>
+                              <p className="font-medium">{getStatusBadge(getUserOffer()?.status || '')}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                        <CardFooter className="pt-2">
+                          {getUserOffer()?.status === 'PENDING' && (
+                            <Button
+                              variant="destructive"
+                              onClick={() => handleWithdrawOffer(getUserOffer()?.id || '')}
+                              disabled={processingAction !== null}
+                            >
+                              {processingAction === `withdrawing-${getUserOffer()?.id}` ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Withdraw Offer
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </CardFooter>
+                      </Card>
+                    )}
+                  </div>
+                ) : loanRequest.status !== 'OPEN' ? (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>This loan request is no longer open</AlertTitle>
+                    <AlertDescription>
+                      You cannot make an offer for this loan request as it has already been fulfilled or closed.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <CreateLoanOffer
+                    onSubmit={handleOfferSubmit}
+                    requestData={{
+                      amount: loanRequest.amount,
+                      duration: loanRequest.duration,
+                      interestRate: loanRequest.interestRate
+                    }}
+                    isSubmitting={processingAction === 'submitting-offer'}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

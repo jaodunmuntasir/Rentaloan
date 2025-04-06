@@ -6,12 +6,12 @@ import { RentalAgreement } from '../types/rental.types';
 export const RentalAgreementApi = {
   // Get all rental agreements for the current user
   async getRentalAgreements(user: FirebaseUser | AppUser | null) {
-    return apiCall<RentalAgreement[]>('/api/rental', 'GET', user);
+    return apiCall('/api/rental', 'GET', user);
   },
   
   // Get a specific rental agreement by ID or address
   async getRentalAgreementDetails(user: FirebaseUser | AppUser | null, id: string) {
-    return apiCall<RentalAgreement>(`/api/rental/${id}`, 'GET', user);
+    return apiCall(`/api/rental/${id}`, 'GET', user);
   },
   
   // Create a new rental agreement in the database
@@ -32,7 +32,7 @@ export const RentalAgreementApi = {
       paymentInterval: number;
     }
   ) {
-    return apiCall<RentalAgreement>('/api/rental/create', 'POST', user, data);
+    return apiCall('/api/rental/create', 'POST', user, data);
   },
   
   // Update a rental agreement
@@ -41,7 +41,7 @@ export const RentalAgreementApi = {
     id: string,
     data: Partial<RentalAgreement>
   ) {
-    return apiCall<RentalAgreement>(`/api/rental/${id}`, 'PUT', user, data);
+    return apiCall(`/api/rental/${id}`, 'PUT', user, data);
   },
   
   // Pay security deposit

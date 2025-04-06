@@ -43,7 +43,6 @@ const MyRequestsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'duration' | 'offers'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
@@ -129,13 +128,6 @@ const MyRequestsPage: React.FC = () => {
           request.rentalAgreement?.contractAddress.toLowerCase().includes(searchLower) ||
           request.amount.includes(searchTerm)
         );
-      }
-      return true;
-    })
-    .filter(request => {
-      // Filter by status
-      if (statusFilter) {
-        return request.status === statusFilter;
       }
       return true;
     })

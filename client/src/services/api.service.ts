@@ -36,7 +36,7 @@ async function getAuthToken(user: FirebaseUser | null): Promise<string | null> {
 }
 
 // Base API call with authentication
-export async function apiCall<T>(
+export async function apiCall(
   endpoint: string, 
   method: string, 
   user: FirebaseUser | AppUser | null, 
@@ -96,13 +96,7 @@ export async function apiCall<T>(
 export const UserApi = {
   // Get current user profile
   async getProfile(user: FirebaseUser | AppUser | null) {
-    return apiCall<{
-      id: string;
-      email: string;
-      name: string;
-      walletAddress: string | null;
-      createdAt: string;
-    }>('/api/user/profile', 'GET', user);
+    return apiCall('/api/user/profile', 'GET', user);
   },
   
   // Update user profile
@@ -184,115 +178,163 @@ export const RentalApi = {
 
 // Loan related API calls
 export const LoanApi = {
-  // Create a new loan request
-  createLoanRequest: async (user: AppUser, data: {
-    rentalAgreementAddress: string;
-    requestedAmount: string;
-    loanDuration: number;
-    interestRate: number;
-  }) => {
+  // Get all loan requests
+  async getLoanRequests(
+    user: AppUser
+  ): Promise<{ loanRequests: any[]; success: boolean; error?: string }> {
     try {
-      const response = await api.post(
-        '/api/loan/request', 
-        data, 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error creating loan request:', error);
-      throw error;
-    }
-  },
+      const response = await apiCall('/api/loan/requests', 'GET', user);
 
-  // Get all loan requests for a user
-  getLoanRequests: async (user: AppUser) => {
-    try {
-      const response = await api.get(
-        '/api/loan/requests', 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
+      return {
+        loanRequests: response?.loanRequests || [],
+        success: true,
+      };
+    } catch (error: any) {
       console.error('Error fetching loan requests:', error);
-      throw error;
+      return {
+        loanRequests: [],
+        success: false,
+        error: error.message || 'Failed to fetch loan requests',
+      };
     }
   },
 
-  // Get a single loan request by ID
-  getLoanRequest: async (user: AppUser, requestId: string) => {
+  // Get a specific loan request by ID
+  async getLoanRequest(
+    user: AppUser,
+    requestId: string
+  ): Promise<{ loanRequest: any; loanOffers: any[]; success: boolean; error?: string }> {
     try {
-      const response = await api.get(
-        `/api/loan/request/${requestId}`, 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
+      if (!user || !user.token) {
+        console.error('Error fetching loan request: No valid user or token provided');
+        return {
+          loanRequest: null,
+          loanOffers: [],
+          success: false,
+          error: 'Authentication error: No valid user token',
+        };
+      }
+      
+      const response = await apiCall(`/api/loan/requests/${requestId}`, 'GET', user);
+      console.log('Loan request fetched successfully:', response);
+      
+      return {
+        loanRequest: response?.loanRequest || null,
+        loanOffers: response?.loanOffers || [],
+        success: true,
+      };
+    } catch (error: any) {
       console.error('Error fetching loan request:', error);
-      throw error;
+      // Check for specific error types
+      if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+        return {
+          loanRequest: null,
+          loanOffers: [],
+          success: false,
+          error: 'Authentication error: Please log in again to refresh your session',
+        };
+      }
+      return {
+        loanRequest: null,
+        loanOffers: [],
+        success: false,
+        error: error.message || 'Failed to fetch loan request',
+      };
     }
   },
 
-  // Create a loan offer for a request
-  createLoanOffer: async (user: AppUser, data: {
-    requestId: string;
-    interestRate: number;
-    offerAmount: string;
-    duration: number;
-  }) => {
+  // Create a loan request
+  async createLoanRequest(
+    user: AppUser,
+    data: {
+      rentalAgreementId: string;
+      amount: string;
+      interestRate: number;
+      duration: number;
+    }
+  ): Promise<{ loanRequest: any; success: boolean; error?: string }> {
     try {
-      const response = await api.post(
-        '/api/loan/offer', 
-        data, 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
+      const response = await apiCall('/api/loan/requests', 'POST', user, data);
+
+      return {
+        loanRequest: response?.loanRequest || null,
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error creating loan request:', error);
+      return {
+        loanRequest: null,
+        success: false,
+        error: error.message || 'Failed to create loan request',
+      };
+    }
+  },
+
+  // Create a loan offer
+  async createLoanOffer(
+    user: AppUser,
+    data: {
+      requestId: string;
+      interestRate: number;
+      offerAmount: string;
+    }
+  ): Promise<{ loanOffer: any; success: boolean; error?: string }> {
+    try {
+      const response = await apiCall('/api/loan/offers', 'POST', user, data);
+
+      return {
+        loanOffer: response?.loanOffer || null,
+        success: true,
+      };
+    } catch (error: any) {
       console.error('Error creating loan offer:', error);
-      throw error;
+      return {
+        loanOffer: null,
+        success: false,
+        error: error.message || 'Failed to create loan offer',
+      };
     }
   },
 
   // Accept a loan offer
-  acceptLoanOffer: async (user: AppUser, offerId: string) => {
+  async acceptLoanOffer(
+    user: AppUser,
+    offerId: string
+  ): Promise<{ loanAgreement: any; success: boolean; error?: string }> {
     try {
-      const response = await api.post(
-        `/api/loan/offer/${offerId}/accept`, 
-        {}, 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error accepting loan offer:', error);
-      throw error;
-    }
-  },
+      const response = await apiCall(`/api/loan/offers/${offerId}/accept`, 'POST', user);
 
-  // Withdraw a loan offer (for lender)
-  withdrawLoanOffer: async (user: AppUser, offerId: string) => {
-    try {
-      const response = await api.post(
-        `/api/loan/offer/${offerId}/withdraw`, 
-        {}, 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error withdrawing loan offer:', error);
-      throw error;
+      return {
+        loanAgreement: response?.loanAgreement || null,
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error accepting loan offer:', error);
+      return {
+        loanAgreement: null,
+        success: false,
+        error: error.message || 'Failed to accept loan offer',
+      };
     }
   },
   
-  // Get offers made by a user
-  getUserOffers: async (user: AppUser) => {
+  // Withdraw a loan offer
+  async withdrawLoanOffer(
+    user: AppUser,
+    offerId: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await api.get(
-        '/api/loan/myoffers', 
-        getAuthHeader(user)
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Error fetching user offers:', error);
-      throw error;
+      await apiCall(`/api/loan/offers/${offerId}/withdraw`, 'POST', user);
+
+      return {
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error withdrawing loan offer:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to withdraw loan offer',
+      };
     }
   },
 

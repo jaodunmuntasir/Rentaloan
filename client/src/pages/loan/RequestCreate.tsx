@@ -152,9 +152,9 @@ const RequestCreate: React.FC = () => {
       
       // Create loan request via API
       const response = await LoanApi.createLoanRequest(appUser, {
-        rentalAgreementAddress: address,
-        requestedAmount: loanAmount,
-        loanDuration: loanDuration,
+        rentalAgreementId: address,
+        amount: loanAmount,
+        duration: loanDuration,
         interestRate: interestRate
       });
       

@@ -7,12 +7,11 @@ import { LoanRequest, LoanRequestStatus } from '../models/loan-request.model';
 import { LoanOffer, LoanOfferStatus } from '../models/loan-offer.model';
 import { LoanAgreement, LoanAgreementStatus } from '../models/loan-agreement.model';
 import { Payment, PaymentType } from '../models/payment.model';
-import blockchainService from '../services/blockchain.service';
 
 const router = express.Router();
 
 // Helper function to convert BigInt values to strings for JSON serialization
-const convertBigIntToString = (obj: any): any => {
+const convertBigIntToString = (obj: any, processed = new WeakMap<object, any>()): any => {
   if (obj === null || obj === undefined) {
     return obj;
   }
@@ -21,18 +20,34 @@ const convertBigIntToString = (obj: any): any => {
     return obj.toString();
   }
   
-  if (Array.isArray(obj)) {
-    return obj.map(item => convertBigIntToString(item));
-  }
-  
+  // Handle circular references
   if (typeof obj === 'object') {
-    const result: any = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        result[key] = convertBigIntToString(obj[key]);
-      }
+    // Return already processed objects to avoid infinite recursion
+    if (processed.has(obj)) {
+      return processed.get(obj);
     }
-    return result;
+    
+    if (Array.isArray(obj)) {
+      const result: any[] = [];
+      // Store the array in the WeakMap before processing its elements
+      processed.set(obj, result);
+      
+      for (let i = 0; i < obj.length; i++) {
+        result[i] = convertBigIntToString(obj[i], processed);
+      }
+      return result;
+    } else {
+      const result: any = {};
+      // Store the object in the WeakMap before processing its properties
+      processed.set(obj, result);
+      
+      for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+          result[key] = convertBigIntToString(obj[key], processed);
+        }
+      }
+      return result;
+    }
   }
   
   return obj;
@@ -231,53 +246,151 @@ router.get('/requests', authenticate, async (req: Request, res: Response) => {
 router.get('/requests/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    console.log(`GET /loan/requests/${id} - Request received from user:`, req.user?.uid);
+    
+    // Validate ID parameter
+    if (!id || isNaN(parseInt(id))) {
+      console.log(`Invalid loan request ID:`, id);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid loan request ID' 
+      });
+    }
     
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      console.log(`User not found with Firebase ID:`, req.user?.uid);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
     }
+    console.log(`User found:`, user.id, user.email);
     
-    // Find the loan request
-    const loanRequest = await LoanRequest.findByPk(id, {
-      include: [
-        { 
-          model: RentalAgreement,
-          include: [
-            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
-          ]
+    // More detailed step by step logging
+    console.log(`Finding loan request with ID:`, id);
+    console.log('Query parameters:', {
+      id: id,
+      includeRentalAgreement: true,
+      includeRequester: true
+    });
+    
+    try {
+      // Find the loan request with nested includes in separate steps for better error tracking
+      let loanRequest;
+      
+      // Step 1: Get just the loan request
+      console.log('Step 1: Finding basic loan request');
+      loanRequest = await LoanRequest.findByPk(id);
+      console.log('Basic loan request found:', loanRequest ? 'Yes' : 'No');
+      
+      if (!loanRequest) {
+        console.log(`Loan request not found with ID:`, id);
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Loan request not found' 
+        });
+      }
+      
+      // Step 2: Get the requester info
+      console.log('Step 2: Finding requester');
+      const requester = await User.findByPk(loanRequest.requesterId, {
+        attributes: ['id', 'email', 'walletAddress']
+      });
+      console.log('Requester found:', requester ? 'Yes' : 'No');
+      
+      // Step 3: Get rental agreement
+      console.log('Step 3: Finding rental agreement');
+      const rentalAgreement = await RentalAgreement.findByPk(loanRequest.rentalAgreementId, {
+        include: [
+          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+        ]
+      });
+      console.log('Rental agreement found:', rentalAgreement ? 'Yes' : 'No');
+      
+      // Step 4: Add the associations manually
+      loanRequest.setDataValue('requester', requester);
+      loanRequest.setDataValue('rentalAgreement', rentalAgreement);
+      
+      // Step 5: Get loan offers
+      console.log('Step 5: Finding loan offers');
+      const loanOffers = await LoanOffer.findAll({
+        where: { loanRequestId: loanRequest.id },
+        include: [
+          { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] }
+        ]
+      });
+      console.log(`Found ${loanOffers.length} loan offers`);
+      
+      // Return database data only - no blockchain calls
+      const responseData = {
+        success: true,
+        loanRequest: {
+          id: loanRequest.id,
+          amount: loanRequest.amount,
+          duration: loanRequest.duration,
+          interestRate: loanRequest.interestRate,
+          status: loanRequest.status,
+          createdAt: loanRequest.createdAt,
+          updatedAt: loanRequest.updatedAt,
+          requester: requester ? {
+            id: requester.id,
+            email: requester.email,
+            walletAddress: requester.walletAddress
+          } : null,
+          rentalAgreement: rentalAgreement ? {
+            id: rentalAgreement.id,
+            contractAddress: rentalAgreement.contractAddress,
+            name: rentalAgreement.name,
+            status: rentalAgreement.status,
+            duration: rentalAgreement.duration,
+            securityDeposit: rentalAgreement.securityDeposit,
+            baseRent: rentalAgreement.baseRent,
+            gracePeriod: rentalAgreement.gracePeriod,
+            landlord: rentalAgreement.landlord ? {
+              id: rentalAgreement.landlord.id,
+              email: rentalAgreement.landlord.email,
+              walletAddress: rentalAgreement.landlord.walletAddress
+            } : null,
+            renter: rentalAgreement.renter ? {
+              id: rentalAgreement.renter.id,
+              email: rentalAgreement.renter.email,
+              walletAddress: rentalAgreement.renter.walletAddress
+            } : null
+          } : null
         },
-        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
-      ]
-    });
-    
-    if (!loanRequest) {
-      return res.status(404).json({ message: 'Loan request not found' });
+        loanOffers: loanOffers.map(offer => ({
+          id: offer.id,
+          interestRate: offer.interestRate,
+          status: offer.status,
+          expirationDate: offer.expirationDate,
+          createdAt: offer.createdAt,
+          lender: offer.lender ? {
+            id: offer.lender.id,
+            email: offer.lender.email,
+            walletAddress: offer.lender.walletAddress
+          } : null
+        }))
+      };
+      
+      console.log(`Sending response for loan request:`, loanRequest.id);
+      res.json(responseData);
+    } catch (innerError) {
+      console.error('Error in database queries:', innerError);
+      throw innerError; // Re-throw to be caught by outer catch
     }
-    
-    // Get loan offers for this request
-    const loanOffers = await LoanOffer.findAll({
-      where: { loanRequestId: loanRequest.id },
-      include: [
-        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] }
-      ]
-    });
-    
-    // Get available collateral for the rental agreement
-    const availableCollateral = await blockchainService.getAvailableCollateral(
-      loanRequest.rentalAgreement.contractAddress
-    );
-    
-    res.json(convertBigIntToString({
-      loanRequest,
-      loanOffers,
-      availableCollateral
-    }));
   } catch (error) {
     console.error('Error retrieving loan request:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
     res.status(500).json({
+      success: false,
       message: 'Failed to retrieve loan request',
-      error: (error as Error).message
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
@@ -397,19 +510,6 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       return res.status(400).json({ message: 'Rental agreement is no longer active' });
     }
     
-    // Check if there's enough collateral available
-    const availableCollateral = await blockchainService.getAvailableCollateral(
-      loanOffer.loanRequest.rentalAgreement.contractAddress
-    );
-    
-    if (parseFloat(availableCollateral) < loanOffer.loanRequest.amount) {
-      return res.status(400).json({ 
-        message: 'Insufficient collateral available',
-        available: availableCollateral,
-        requested: loanOffer.loanRequest.amount
-      });
-    }
-    
     // Update loan request status to FULFILLED
     await loanOffer.loanRequest.update({ status: LoanRequestStatus.FULFILLED });
     
@@ -428,8 +528,13 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       }
     );
     
-    // Create loan agreement
+    // Generate a contract address for database purposes only
+    // In a real implementation, this would come from the blockchain
+    const contractAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+    
+    // Create loan agreement in database only
     const loanAgreement = await LoanAgreement.create({
+      contractAddress,
       loanRequestId: loanOffer.loanRequestId,
       loanOfferId: loanOffer.id,
       borrowerId: loanOffer.loanRequest.requesterId,
@@ -439,49 +544,21 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       interestRate: loanOffer.interestRate,
       duration: loanOffer.loanRequest.duration,
       createdDate: new Date(),
-      status: LoanAgreementStatus.PENDING,
+      status: LoanAgreementStatus.ACTIVE,
       remainingBalance: loanOffer.loanRequest.amount
     });
     
-    // Create the loan on the blockchain
-    try {
-      const contractAddress = await blockchainService.createLoan(
-        loanOffer.loanRequest.rentalAgreement.contractAddress,
-        loanOffer.lender.walletAddress,
-        loanOffer.loanRequest.amount,
-        loanOffer.interestRate,
-        loanOffer.loanRequest.duration
-      );
-      
-      // Update loan agreement with contract address
-      await loanAgreement.update({
+    res.json(convertBigIntToString({
+      message: 'Loan offer accepted and agreement created',
+      loanAgreement: {
+        id: loanAgreement.id,
         contractAddress,
-        status: LoanAgreementStatus.ACTIVE
-      });
-      
-      res.json(convertBigIntToString({
-        message: 'Loan offer accepted and agreement created',
-        loanAgreement: {
-          id: loanAgreement.id,
-          contractAddress,
-          amount: loanAgreement.amount,
-          interestRate: loanAgreement.interestRate,
-          duration: loanAgreement.duration,
-          status: loanAgreement.status
-        }
-      }));
-    } catch (blockchainError) {
-      // If blockchain operation fails, revert database changes
-      await loanAgreement.update({ status: LoanAgreementStatus.FAILED });
-      await loanOffer.update({ status: LoanOfferStatus.PENDING });
-      await loanOffer.loanRequest.update({ status: LoanRequestStatus.OPEN });
-      
-      console.error('Blockchain error creating loan:', blockchainError);
-      res.status(500).json({
-        message: 'Failed to create loan on blockchain',
-        error: (blockchainError as Error).message
-      });
-    }
+        amount: loanAgreement.amount,
+        interestRate: loanAgreement.interestRate,
+        duration: loanAgreement.duration,
+        status: loanAgreement.status
+      }
+    }));
   } catch (error) {
     console.error('Error accepting loan offer:', error);
     res.status(500).json({
@@ -571,9 +648,6 @@ router.get('/agreement/:address', authenticate, async (req: Request, res: Respon
       return res.status(403).json({ message: 'You are not authorized to view this loan agreement' });
     }
     
-    // Get loan details from blockchain
-    const loanDetails = await blockchainService.getLoanDetails(address);
-    
     // Get payment history
     const payments = await Payment.findAll({
       where: {
@@ -585,7 +659,6 @@ router.get('/agreement/:address', authenticate, async (req: Request, res: Respon
     
     res.json(convertBigIntToString({
       loanAgreement,
-      loanDetails,
       payments
     }));
   } catch (error) {
@@ -638,18 +711,7 @@ router.post('/agreement/:address/initialize', authenticate, async (req: Request,
       return res.status(400).json({ message: 'Loan is not in active state' });
     }
     
-    // Verify the transaction on the blockchain
-    const isValid = await blockchainService.verifyLoanInitialization(
-      address,
-      user.walletAddress,
-      transactionHash
-    );
-    
-    if (!isValid) {
-      return res.status(400).json({ message: 'Invalid transaction' });
-    }
-    
-    // Update loan agreement status
+    // Update loan agreement status - no blockchain verification
     await loanAgreement.update({ status: LoanAgreementStatus.FUNDED });
     
     // Record the payment
@@ -715,19 +777,6 @@ router.post('/agreement/:address/repay', authenticate, async (req: Request, res:
     // Check if loan is funded
     if (loanAgreement.status !== LoanAgreementStatus.FUNDED) {
       return res.status(400).json({ message: 'Loan is not in funded state' });
-    }
-    
-    // Verify the transaction on the blockchain
-    const isValid = await blockchainService.verifyLoanRepayment(
-      address,
-      user.walletAddress,
-      month,
-      amount,
-      transactionHash
-    );
-    
-    if (!isValid) {
-      return res.status(400).json({ message: 'Invalid transaction' });
     }
     
     // Calculate remaining balance

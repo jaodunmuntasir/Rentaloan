@@ -3,45 +3,35 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Label } from '../ui/label';
 import { Slider } from '../ui/slider';
-import { Input } from '../ui/input';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { InfoIcon, BadgePercent, Clock, CreditCard, Calculator } from 'lucide-react';
+import { InfoIcon, BadgePercent, Clock, CreditCard, Calculator, Loader2 } from 'lucide-react';
 
 interface CreateLoanOfferProps {
-  loanRequestAddress: string;
-  loanAmount: string;
-  borrowerPreferredRate?: number;
-  borrowerRequestedDuration?: number;
-  maxLoanAmount?: string;
-  maxDuration?: number;
-  maxInterestRate?: number;
-  onSubmit?: (interestRate: number, duration: number) => Promise<void>;
+  requestData: {
+    amount: string;
+    interestRate?: number;
+    duration?: number;
+  };
+  isSubmitting?: boolean;
+  onSubmit?: (interestRate: number, duration: number, amount: string) => Promise<void>;
 }
 
 const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
-  loanRequestAddress,
-  loanAmount,
-  borrowerPreferredRate,
-  borrowerRequestedDuration,
-  maxLoanAmount = '0',
-  maxDuration = 36,
-  maxInterestRate = 35,
+  requestData,
+  isSubmitting = false,
   onSubmit
 }) => {
   // State
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<boolean>(false);
   
   // Form state
-  const [offerAmount, setOfferAmount] = useState(loanAmount);
-  const [interestRate, setInterestRate] = useState(borrowerPreferredRate || 5);
-  const [duration, setDuration] = useState(borrowerRequestedDuration || 12);
+  const [interestRate, setInterestRate] = useState(requestData.interestRate || 5);
+  const [duration, setDuration] = useState(requestData.duration || 12);
   
   // Calculated values
-  const monthlyPayment = calculateMonthlyPayment(offerAmount, interestRate, duration);
+  const monthlyPayment = calculateMonthlyPayment(requestData.amount, interestRate, duration);
   const totalRepayment = calculateTotalRepayment(monthlyPayment, duration);
-  const totalInterest = calculateTotalInterest(offerAmount, totalRepayment);
+  const totalInterest = calculateTotalInterest(requestData.amount, totalRepayment);
   const apr = calculateAPR(interestRate);
   
   // Calculate monthly payment
@@ -83,20 +73,6 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
     return interestRate.toFixed(2);
   }
   
-  // Handle amount change
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      const numValue = parseFloat(value) || 0;
-      const maxValue = parseFloat(maxLoanAmount);
-      
-      // Ensure amount is not more than max loan amount
-      if (numValue <= maxValue) {
-        setOfferAmount(value);
-      }
-    }
-  };
-  
   // Handle interest rate slider change
   const handleInterestRateChange = (value: number[]) => {
     setInterestRate(value[0]);
@@ -107,59 +83,22 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
     setDuration(value[0]);
   };
   
-  // Validate form
-  const isFormValid = (): boolean => {
-    const amount = parseFloat(offerAmount);
-    const maxAmount = parseFloat(maxLoanAmount);
-    
-    return (
-      amount > 0 &&
-      amount <= maxAmount &&
-      interestRate >= 1 &&
-      interestRate <= maxInterestRate &&
-      duration >= 1 &&
-      duration <= maxDuration
-    );
-  };
-  
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (loading) return;
+    if (isSubmitting) return;
     
-    if (!isFormValid()) {
-      setError('Please check your offer details. Amount must be greater than 0 and not exceed the requested amount. Interest rate must be between 1% and 35%.');
-      return;
-    }
-    
-    setLoading(true);
     setError(null);
-    setSuccess(false);
     
     try {
-      // In a real app, this would call a blockchain transaction
-      console.log('Creating loan offer with:', {
-        loanRequestAddress,
-        offerAmount,
-        interestRate,
-        duration
-      });
-      
       // If onSubmit callback is provided, call it
       if (onSubmit) {
-        await onSubmit(interestRate, duration);
-        setSuccess(true);
-      } else {
-        // Simulate waiting for transaction
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        setSuccess(true);
+        await onSubmit(interestRate, duration, requestData.amount);
       }
     } catch (err) {
       console.error("Error creating loan offer:", err);
       setError('Failed to create loan offer. Please try again.');
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -170,33 +109,12 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
           <CreditCard className="h-5 w-5 mr-2" /> Create a Loan Offer
         </CardTitle>
         <CardDescription>
-          Offer to lend up to {loanAmount} ETH to this borrower with your terms
+          Offer to lend {requestData.amount} ETH to this borrower with your terms
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Offer Amount */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="offer-amount" className="flex items-center gap-1">
-                  <CreditCard className="h-4 w-4" /> Offer Amount
-                </Label>
-                <span className="font-medium text-lg">{offerAmount} ETH</span>
-              </div>
-              <Input
-                id="offer-amount"
-                type="text"
-                value={offerAmount}
-                onChange={handleAmountChange}
-                className="mt-1"
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                <InfoIcon className="h-3 w-3 inline mr-1" /> 
-                Maximum: {maxLoanAmount} ETH (requested amount)
-              </p>
-            </div>
-            
             {/* Interest Rate */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -208,20 +126,19 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
               <Slider
                 id="interest-rate"
                 defaultValue={[interestRate]}
-                value={[interestRate]}
                 min={1}
-                max={maxInterestRate}
+                max={20}
                 step={0.25}
                 onValueChange={handleInterestRateChange}
                 className="my-4"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>1%</span>
-                <span>{maxInterestRate}%</span>
+                <span>20%</span>
               </div>
-              {borrowerPreferredRate && (
+              {requestData.interestRate && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  <InfoIcon className="h-3 w-3 inline mr-1" /> Borrower prefers {borrowerPreferredRate}%
+                  <InfoIcon className="h-3 w-3 inline mr-1" /> Borrower prefers {requestData.interestRate}%
                 </p>
               )}
             </div>
@@ -237,20 +154,19 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
               <Slider
                 id="duration"
                 defaultValue={[duration]}
-                value={[duration]}
-                min={1}
-                max={maxDuration}
+                min={3}
+                max={36}
                 step={1}
                 onValueChange={handleDurationChange}
                 className="my-4"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1 month</span>
-                <span>{maxDuration} months</span>
+                <span>3 months</span>
+                <span>36 months</span>
               </div>
-              {borrowerRequestedDuration && (
+              {requestData.duration && (
                 <p className="text-sm text-muted-foreground mt-1">
-                  <InfoIcon className="h-3 w-3 inline mr-1" /> Borrower requested {borrowerRequestedDuration} months
+                  <InfoIcon className="h-3 w-3 inline mr-1" /> Borrower requested {requestData.duration} months
                 </p>
               )}
             </div>
@@ -289,16 +205,12 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
             </Alert>
           )}
           
-          {success && (
-            <Alert className="bg-green-50 text-green-800 border-green-200">
-              <AlertTitle>Success</AlertTitle>
-              <AlertDescription>Your loan offer has been submitted successfully!</AlertDescription>
-            </Alert>
-          )}
-          
-          <Button type="submit" disabled={loading || !isFormValid()} className="w-full">
-            {loading ? (
-              <>Processing...</>
+          <Button type="submit" disabled={isSubmitting} className="w-full">
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
             ) : (
               <>Submit Loan Offer</>
             )}

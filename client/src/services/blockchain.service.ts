@@ -71,13 +71,13 @@ export class BlockchainService {
       const provider = this.initialize();
       const contract = new ethers.Contract(contractAddress, RentalAgreementABI, provider);
 
-      // Get security deposit amount
+      // Get security deposit amount from the contract
       const securityDeposit = await contract.securityDeposit();
-      const totalDeposited = await contract.totalDeposited();
+      const currentSecurityDeposit = await contract.getCurrentSecurityDeposit();
 
       return {
-        availableAmount: ethers.formatEther(securityDeposit),
-        totalDeposited: ethers.formatEther(totalDeposited)
+        availableAmount: ethers.formatEther(currentSecurityDeposit),
+        totalDeposited: ethers.formatEther(securityDeposit)
       };
     } catch (error) {
       console.error('Error fetching collateral info:', error);
