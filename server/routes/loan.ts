@@ -554,6 +554,178 @@ router.post('/offer', authenticate, async (req: Request, res: Response) => {
 router.post('/offer/:id/accept', authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    console.log(`POST /loan/offer/${id}/accept - Request received from user:`, req.user?.uid);
+    
+    // Find the user
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      console.log('User not found');
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found' 
+      });
+    }
+    console.log(`User found: ${user.id}, ${user.email}`);
+    
+    // Find the loan offer with detailed logging
+    console.log(`Finding loan offer with ID: ${id}`);
+    const loanOffer = await LoanOffer.findByPk(id, {
+      include: [
+        { 
+          model: LoanRequest,
+          include: [
+            { model: RentalAgreement },
+            { model: User, as: 'requester' }
+          ]
+        },
+        { model: User, as: 'lender' }
+      ]
+    });
+    
+    if (!loanOffer) {
+      console.log(`Loan offer not found with ID: ${id}`);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Loan offer not found' 
+      });
+    }
+    console.log(`Loan offer found: ${loanOffer.id}, Amount: ${loanOffer.amount}, Status: ${loanOffer.status}`);
+    console.log(`Associated loan request: ${loanOffer.loanRequestId}`);
+    
+    // Check if the user is the requester of the loan
+    if (loanOffer.loanRequest.requesterId !== user.id) {
+      console.log(`User ${user.id} is not the requester ${loanOffer.loanRequest.requesterId}`);
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only the loan requester can accept this offer' 
+      });
+    }
+    
+    // Check if the loan offer is still pending
+    if (loanOffer.status !== LoanOfferStatus.PENDING) {
+      console.log(`Loan offer status is not PENDING, current status: ${loanOffer.status}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Loan offer is no longer pending' 
+      });
+    }
+    
+    // Check if the loan request is still open
+    if (loanOffer.loanRequest.status !== LoanRequestStatus.OPEN) {
+      console.log(`Loan request status is not OPEN, current status: ${loanOffer.loanRequest.status}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Loan request is no longer open' 
+      });
+    }
+    
+    // Check if the rental agreement is in ACTIVE state
+    if (loanOffer.loanRequest.rentalAgreement.status !== RentalAgreementStatus.ACTIVE) {
+      console.log(`Rental agreement status is not ACTIVE, current status: ${loanOffer.loanRequest.rentalAgreement.status}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Rental agreement is no longer active' 
+      });
+    }
+    
+    console.log('All validation checks passed, proceeding with loan offer acceptance');
+    
+    // Update loan request status to FULFILLED
+    await loanOffer.loanRequest.update({ status: LoanRequestStatus.FULFILLED });
+    console.log(`Updated loan request status to FULFILLED`);
+    
+    // Update loan offer status to ACCEPTED
+    await loanOffer.update({ status: LoanOfferStatus.ACCEPTED });
+    console.log(`Updated loan offer status to ACCEPTED`);
+    
+    // Reject all other offers for this request
+    await LoanOffer.update(
+      { status: LoanOfferStatus.REJECTED },
+      { 
+        where: { 
+          loanRequestId: loanOffer.loanRequestId,
+          id: { [Op.ne]: loanOffer.id },
+          status: LoanOfferStatus.PENDING
+        } 
+      }
+    );
+    console.log(`Rejected other pending offers for this loan request`);
+    
+    // Generate a contract address for database purposes only
+    // In a real implementation, this would come from the blockchain
+    const contractAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
+    console.log(`Generated contract address: ${contractAddress}`);
+    
+    try {
+      // Convert loan amount and interest rate to proper formats
+      const amountValue = typeof loanOffer.amount === 'string' ? loanOffer.amount : String(loanOffer.amount);
+      
+      // Create loan agreement in database only
+      const loanAgreement = await LoanAgreement.create({
+        contractAddress,
+        loanRequestId: loanOffer.loanRequestId,
+        loanOfferId: loanOffer.id,
+        borrowerId: loanOffer.loanRequest.requesterId,
+        lenderId: loanOffer.lenderId,
+        rentalAgreementId: loanOffer.loanRequest.rentalAgreementId,
+        amount: amountValue,
+        interestRate: loanOffer.interestRate,
+        duration: loanOffer.duration,
+        graceMonths: 0, // Always 0 for loans
+        status: LoanAgreementStatus.ACTIVE,
+        startDate: new Date(),
+        remainingBalance: amountValue
+      });
+      console.log(`Created loan agreement: ${loanAgreement.id}`);
+      
+      res.json({
+        success: true,
+        message: 'Loan offer accepted and agreement created',
+        loanAgreement: {
+          id: loanAgreement.id,
+          contractAddress,
+          amount: loanAgreement.amount,
+          interestRate: loanAgreement.interestRate,
+          duration: loanAgreement.duration,
+          status: loanAgreement.status
+        }
+      });
+    } catch (createError) {
+      console.error('Error creating loan agreement:', createError);
+      // If there's an error creating the loan agreement, revert the status changes
+      await loanOffer.loanRequest.update({ status: LoanRequestStatus.OPEN });
+      await loanOffer.update({ status: LoanOfferStatus.PENDING });
+      
+      throw createError;
+    }
+  } catch (error) {
+    console.error('Error accepting loan offer:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Failed to accept loan offer',
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Register a blockchain-created loan agreement
+// @ts-ignore
+router.post('/agreement/register', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { offerId, contractAddress, transactionHash } = req.body;
+    
+    if (!offerId || !contractAddress || !transactionHash) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields: offerId, contractAddress, and transactionHash are required' 
+      });
+    }
     
     // Find the user
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
@@ -562,7 +734,7 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
     }
     
     // Find the loan offer
-    const loanOffer = await LoanOffer.findByPk(id, {
+    const loanOffer = await LoanOffer.findByPk(offerId, {
       include: [
         { 
           model: LoanRequest,
@@ -579,49 +751,20 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       return res.status(404).json({ message: 'Loan offer not found' });
     }
     
-    // Check if the user is the requester of the loan
-    if (loanOffer.loanRequest.requesterId !== user.id) {
-      return res.status(403).json({ message: 'Only the loan requester can accept this offer' });
+    // Check if the user is the requester of the loan or the lender
+    const isRequester = loanOffer.loanRequest.requesterId === user.id;
+    const isLender = loanOffer.lenderId === user.id;
+    
+    if (!isRequester && !isLender) {
+      return res.status(403).json({ message: 'You do not have permission to register this loan agreement' });
     }
     
-    // Check if the loan offer is still pending
-    if (loanOffer.status !== LoanOfferStatus.PENDING) {
-      return res.status(400).json({ message: 'Loan offer is no longer pending' });
+    // Confirm the offer is in an ACCEPTED state
+    if (loanOffer.status !== LoanOfferStatus.ACCEPTED) {
+      return res.status(400).json({ message: 'Loan offer must be in ACCEPTED state to register a loan agreement' });
     }
     
-    // Check if the loan request is still open
-    if (loanOffer.loanRequest.status !== LoanRequestStatus.OPEN) {
-      return res.status(400).json({ message: 'Loan request is no longer open' });
-    }
-    
-    // Check if the rental agreement is in ACTIVE state
-    if (loanOffer.loanRequest.rentalAgreement.status !== RentalAgreementStatus.ACTIVE) {
-      return res.status(400).json({ message: 'Rental agreement is no longer active' });
-    }
-    
-    // Update loan request status to FULFILLED
-    await loanOffer.loanRequest.update({ status: LoanRequestStatus.FULFILLED });
-    
-    // Update loan offer status to ACCEPTED
-    await loanOffer.update({ status: LoanOfferStatus.ACCEPTED });
-    
-    // Reject all other offers for this request
-    await LoanOffer.update(
-      { status: LoanOfferStatus.REJECTED },
-      { 
-        where: { 
-          loanRequestId: loanOffer.loanRequestId,
-          id: { [Op.ne]: loanOffer.id },
-          status: LoanOfferStatus.PENDING
-        } 
-      }
-    );
-    
-    // Generate a contract address for database purposes only
-    // In a real implementation, this would come from the blockchain
-    const contractAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
-    
-    // Create loan agreement in database only
+    // Create loan agreement in database
     const loanAgreement = await LoanAgreement.create({
       contractAddress,
       loanRequestId: loanOffer.loanRequestId,
@@ -629,19 +772,22 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       borrowerId: loanOffer.loanRequest.requesterId,
       lenderId: loanOffer.lenderId,
       rentalAgreementId: loanOffer.loanRequest.rentalAgreementId,
-      amount: loanOffer.loanRequest.amount,
+      amount: loanOffer.amount,
       interestRate: loanOffer.interestRate,
-      duration: loanOffer.loanRequest.duration,
-      createdDate: new Date(),
-      status: LoanAgreementStatus.ACTIVE,
-      remainingBalance: loanOffer.loanRequest.amount
+      duration: loanOffer.duration,
+      graceMonths: loanOffer.graceMonths || 0,
+      status: LoanAgreementStatus.CREATED,
+      startDate: new Date(),
+      remainingBalance: loanOffer.amount
     });
     
     res.json(convertBigIntToString({
-      message: 'Loan offer accepted and agreement created',
+      success: true,
+      message: 'Loan agreement registered successfully',
       loanAgreement: {
         id: loanAgreement.id,
         contractAddress,
+        transactionHash,
         amount: loanAgreement.amount,
         interestRate: loanAgreement.interestRate,
         duration: loanAgreement.duration,
@@ -649,9 +795,10 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
       }
     }));
   } catch (error) {
-    console.error('Error accepting loan offer:', error);
+    console.error('Error registering loan agreement:', error);
     res.status(500).json({
-      message: 'Failed to accept loan offer',
+      success: false,
+      message: 'Failed to register loan agreement',
       error: (error as Error).message
     });
   }

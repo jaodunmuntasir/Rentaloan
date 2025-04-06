@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { useContracts } from '../../contexts/ContractContext';
+import { useToast } from '../../contexts/ToastContext';
+import { LoanApi } from '../../services/api.service';
+import { BlockchainService, LoanAgreementDetails, LoanAgreementStatus } from '../../services/blockchain.service';
 import PayLoan from '../../components/loan/PayLoan';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
@@ -28,39 +30,59 @@ interface Payment {
   status: 'pending' | 'paid' | 'missed' | 'future';
 }
 
-interface LoanAgreement {
+interface LoanAgreementData {
   id: string;
-  borrower: string;
-  lender: string;
-  loanAmount: string;
+  contractAddress: string;
+  borrowerId: number;
+  lenderId: number;
+  amount: string;
   interestRate: number;
-  loanDuration: number;
-  installmentAmount: string;
-  nextPaymentDue: Date | null;
-  startDate: Date;
-  endDate: Date;
-  currentPaidAmount: string;
-  totalRemainingAmount: string;
-  remainingInstallments: number;
-  status: 'active' | 'paid' | 'defaulted';
-  payments: Payment[];
+  duration: number;
   graceMonths: number;
-  gracePeriodsUsed: number;
-  rentalAddress: string;
-  propertyAddress: string;
+  status: string;
+  startDate: Date;
+  borrower?: {
+    id: number;
+    email: string;
+    walletAddress: string;
+  };
+  lender?: {
+    id: number;
+    email: string;
+    walletAddress: string;
+  };
+  loanRequest?: {
+    id: number;
+    amount: string;
+    duration: number;
+  };
+  loanOffer?: {
+    id: number;
+    amount: string;
+    interestRate: number;
+  };
+  rentalAgreement?: {
+    id: number;
+    contractAddress: string;
+    name: string;
+  };
 }
 
 const LoanAgreementDetail: React.FC = () => {
   const { address } = useParams<{ address: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { showToast } = useToast();
   
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
-  const [agreement, setAgreement] = useState<LoanAgreement | null>(null);
+  const [dbAgreement, setDbAgreement] = useState<LoanAgreementData | null>(null);
+  const [blockchainAgreement, setBlockchainAgreement] = useState<LoanAgreementDetails | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [processingAction, setProcessingAction] = useState<string | null>(null);
   
-  // Mock data function for demo purposes
+  // Fetch agreement details from database and blockchain
   useEffect(() => {
     const fetchAgreementDetails = async () => {
       if (!address) {
@@ -69,99 +91,74 @@ const LoanAgreementDetail: React.FC = () => {
         return;
       }
       
+      if (!currentUser) {
+        setError('You must be logged in to view this page');
+        setLoading(false);
+        return;
+      }
+      
       try {
         setLoading(true);
+        setError(null);
         
-        // In a real app, this would be fetched from the blockchain
-        // Mock data for demo purposes
-        const now = new Date();
-        const startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); // 90 days ago
-        const endDate = new Date(startDate.getTime() + 12 * 30 * 24 * 60 * 60 * 1000); // 12 months from start
-        
-        const mockAgreement: LoanAgreement = {
-          id: address,
-          borrower: '0x9876543210987654321098765432109876543210',
-          lender: '0x1111111111111111111111111111111111111111',
-          loanAmount: '2.5',
-          interestRate: 5.5,
-          loanDuration: 12,
-          installmentAmount: '0.2157',
-          nextPaymentDue: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
-          startDate,
-          endDate,
-          currentPaidAmount: '0.6471',
-          totalRemainingAmount: '1.9413',
-          remainingInstallments: 9,
-          status: 'active',
-          graceMonths: 1,
-          gracePeriodsUsed: 0,
-          rentalAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-          propertyAddress: '123 Main St, New York, NY',
-          payments: [
-            {
-              date: new Date(startDate.getTime() + 30 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'paid'
-            },
-            {
-              date: new Date(startDate.getTime() + 60 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'paid'
-            },
-            {
-              date: new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'paid'
-            },
-            {
-              date: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'pending'
-            },
-            {
-              date: new Date(now.getTime() + 37 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 67 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 97 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 127 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 157 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 187 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 217 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            },
-            {
-              date: new Date(now.getTime() + 247 * 24 * 60 * 60 * 1000),
-              amount: '0.2157',
-              status: 'future'
-            }
-          ]
+        // Convert Firebase User to App User
+        const appUser = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
         };
         
-        setAgreement(mockAgreement);
+        // Fetch data from our database
+        const dbResponse = await LoanApi.getLoanAgreement(appUser, address);
+        
+        if (!dbResponse || !dbResponse.loanAgreement) {
+          throw new Error('Failed to fetch loan agreement from database');
+        }
+        
+        setDbAgreement(dbResponse.loanAgreement);
+        
+        // Fetch data from blockchain
+        try {
+          const blockchainData = await BlockchainService.getLoanAgreementDetails(address);
+          setBlockchainAgreement(blockchainData);
+          
+          // Generate payment schedule based on blockchain data
+          const generatedPayments: Payment[] = [];
+          const startDate = dbResponse.loanAgreement.startDate ? new Date(dbResponse.loanAgreement.startDate) : new Date();
+          
+          for (let i = 0; i < blockchainData.duration; i++) {
+            const paymentDate = new Date(startDate);
+            paymentDate.setMonth(paymentDate.getMonth() + i + 1);
+            
+            const monthNumber = i + 1;
+            const isPaid = monthNumber <= blockchainData.lastPaidMonth;
+            const isCurrent = monthNumber === blockchainData.lastPaidMonth + 1;
+            const isFuture = monthNumber > blockchainData.lastPaidMonth + 1;
+            
+            let status: 'paid' | 'pending' | 'missed' | 'future' = 'future';
+            if (isPaid) {
+              status = 'paid';
+            } else if (isCurrent) {
+              status = 'pending';
+            } else if (isFuture) {
+              status = 'future';
+            }
+            
+            generatedPayments.push({
+              date: paymentDate,
+              amount: blockchainData.monthlyPayment,
+              status
+            });
+          }
+          
+          setPayments(generatedPayments);
+        } catch (blockchainError) {
+          console.error('Error fetching blockchain data:', blockchainError);
+          // We still have DB data, so continue but show a warning
+          showToast('Could not fetch real-time data from blockchain', 'warning');
+        }
       } catch (err) {
         console.error("Error fetching loan agreement details:", err);
         setError('Failed to load loan agreement details');
@@ -171,14 +168,14 @@ const LoanAgreementDetail: React.FC = () => {
     };
     
     fetchAgreementDetails();
-  }, [address]);
+  }, [address, currentUser, showToast]);
   
   // Calculate repayment progress percentage
   const calculateProgress = (): number => {
-    if (!agreement) return 0;
+    if (!blockchainAgreement) return 0;
     
-    const paidAmount = parseFloat(agreement.currentPaidAmount);
-    const totalAmount = parseFloat(agreement.loanAmount) * (1 + (agreement.interestRate / 100));
+    const paidAmount = blockchainAgreement.lastPaidMonth * parseFloat(blockchainAgreement.monthlyPayment);
+    const totalAmount = parseFloat(blockchainAgreement.loanAmount) * (1 + (blockchainAgreement.interestRate / 100));
     
     return Math.min(100, Math.round((paidAmount / totalAmount) * 100));
   };
@@ -198,28 +195,65 @@ const LoanAgreementDetail: React.FC = () => {
   };
   
   // Calculate days until next payment
-  const calculateDaysUntilPayment = (): number => {
-    if (!agreement?.nextPaymentDue) return 0;
+  const daysUntilNextPayment = (): number | null => {
+    const pendingPayment = payments.find(p => p.status === 'pending');
+    if (!pendingPayment) return null;
     
     const now = new Date();
-    const diffTime = agreement.nextPaymentDue.getTime() - now.getTime();
+    const dueDate = pendingPayment.date;
+    const diffTime = Math.abs(dueDate.getTime() - now.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    return Math.max(0, diffDays);
+    return diffDays;
   };
   
-  // Get status badge
-  const getStatusBadge = (status: LoanAgreement['status']) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Active</Badge>;
-      case 'paid':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
-      case 'defaulted':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Defaulted</Badge>;
+  // Get loan status badge
+  const getStatusBadge = (status: LoanAgreementStatus | string) => {
+    let statusText = '';
+    let className = '';
+    
+    // If it's a string (from DB), convert to enum (from blockchain)
+    const statusValue = typeof status === 'string' 
+      ? status 
+      : Object.keys(LoanAgreementStatus)[status as number];
+    
+    switch (statusValue) {
+      case 'INITIALIZED':
+      case String(LoanAgreementStatus.INITIALIZED):
+        statusText = 'Initialized';
+        className = 'bg-yellow-100 text-yellow-800 border-yellow-200';
+        break;
+      case 'READY':
+      case String(LoanAgreementStatus.READY):
+        statusText = 'Ready';
+        className = 'bg-blue-100 text-blue-800 border-blue-200';
+        break;
+      case 'ACTIVE':
+      case String(LoanAgreementStatus.ACTIVE):
+        statusText = 'Active';
+        className = 'bg-green-100 text-green-800 border-green-200';
+        break;
+      case 'PAID':
+      case String(LoanAgreementStatus.PAID):
+        statusText = 'Paid';
+        className = 'bg-indigo-100 text-indigo-800 border-indigo-200';
+        break;
+      case 'COMPLETED':
+      case String(LoanAgreementStatus.COMPLETED):
+        statusText = 'Completed';
+        className = 'bg-purple-100 text-purple-800 border-purple-200';
+        break;
+      case 'DEFAULTED':
+      case String(LoanAgreementStatus.DEFAULTED):
+        statusText = 'Defaulted';
+        className = 'bg-red-100 text-red-800 border-red-200';
+        break;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        statusText = 'Unknown';
+        className = 'bg-gray-100 text-gray-800 border-gray-200';
     }
+    
+    return <Badge className={className}>{statusText}</Badge>;
   };
   
   // Get payment status badge
@@ -238,68 +272,99 @@ const LoanAgreementDetail: React.FC = () => {
     }
   };
   
-  // Check if the current user is the borrower
-  const isUserBorrower = (): boolean => {
-    if (!currentUser || !agreement) return false;
-    return currentUser.uid === agreement.borrower;
+  // Handle payment submission
+  const handlePayment = async (month: number, amount: string) => {
+    if (!address || !currentUser || !blockchainAgreement) return;
+    
+    try {
+      setProcessingAction('payment');
+      
+      // Make payment on blockchain
+      const txHash = await BlockchainService.makeRepayment(address, month, amount);
+      
+      // Update backend with payment info
+      const appUser = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
+      
+      await LoanApi.makeRepayment(appUser, address, month, amount, txHash);
+      
+      showToast('Payment successful!', 'success');
+      
+      // Refresh page data
+      window.location.reload();
+    } catch (err) {
+      console.error('Error making loan payment:', err);
+      showToast('Failed to make payment', 'error');
+    } finally {
+      setProcessingAction(null);
+    }
   };
   
-  // Update payment status after successful payment
-  const handlePaymentSuccess = () => {
-    if (!agreement) return;
-    
-    // Find the pending payment and mark it as paid
-    const updatedPayments = agreement.payments.map(payment => {
-      if (payment.status === 'pending') {
-        return { ...payment, status: 'paid' as const };
-      }
-      return payment;
-    });
-    
-    // Calculate new paid amount
-    const newPaidAmount = (parseFloat(agreement.currentPaidAmount) + parseFloat(agreement.installmentAmount)).toString();
-    
-    // Calculate new remaining amount
-    const newRemainingAmount = (parseFloat(agreement.totalRemainingAmount) - parseFloat(agreement.installmentAmount)).toString();
-    
-    // Find the next payment due date (first future payment)
-    const nextFuturePayment = updatedPayments.find(p => p.status === 'future');
-    
-    // Update agreement state
-    setAgreement({
-      ...agreement,
-      currentPaidAmount: newPaidAmount,
-      totalRemainingAmount: newRemainingAmount,
-      remainingInstallments: agreement.remainingInstallments - 1,
-      nextPaymentDue: nextFuturePayment?.date || null,
-      payments: updatedPayments,
-      status: agreement.remainingInstallments <= 1 ? 'paid' : 'active'
-    });
-    
-    // Show the overview tab
-    setActiveTab('overview');
+  // Determine if user is the borrower
+  const isUserBorrower = (): boolean => {
+    if (!currentUser || !blockchainAgreement) return false;
+    return blockchainAgreement.borrower.toLowerCase() === currentUser.uid.toLowerCase();
+  };
+  
+  // Determine if user is the lender
+  const isUserLender = (): boolean => {
+    if (!currentUser || !blockchainAgreement) return false;
+    return blockchainAgreement.lender.toLowerCase() === currentUser.uid.toLowerCase();
   };
   
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading loan agreement details...</p>
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <span className="ml-2">Loading loan agreement details...</span>
       </div>
     );
   }
   
-  if (error || !agreement) {
+  if (error || (!dbAgreement && !blockchainAgreement)) {
     return (
-      <Alert variant="destructive" className="max-w-3xl mx-auto">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>Error</AlertTitle>
-        <AlertDescription>
-          {error || 'Failed to load loan agreement details'}
-        </AlertDescription>
-      </Alert>
+      <Card className="max-w-md mx-auto mt-8">
+        <CardHeader>
+          <CardTitle>Error</CardTitle>
+          <CardDescription>Failed to load loan agreement details</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive" className="mb-4">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error || "Could not load loan details"}</AlertDescription>
+          </Alert>
+          <Button asChild variant="outline" className="w-full">
+            <a href="/dashboard">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
+  
+  // Use blockchain data first, fallback to database data
+  const loanDetails = {
+    borrower: blockchainAgreement?.borrower || dbAgreement?.borrower?.walletAddress || '',
+    lender: blockchainAgreement?.lender || dbAgreement?.lender?.walletAddress || '',
+    loanAmount: blockchainAgreement?.loanAmount || dbAgreement?.amount || '0',
+    interestRate: blockchainAgreement?.interestRate || dbAgreement?.interestRate || 0,
+    duration: blockchainAgreement?.duration || dbAgreement?.duration || 0,
+    installmentAmount: blockchainAgreement?.monthlyPayment || '0',
+    status: blockchainAgreement?.status || dbAgreement?.status || 'UNKNOWN',
+    startDate: dbAgreement?.startDate ? new Date(dbAgreement.startDate) : new Date(),
+    graceMonths: blockchainAgreement?.graceMonths || dbAgreement?.graceMonths || 0,
+    rentalAddress: dbAgreement?.rentalAgreement?.contractAddress || '',
+    remainingBalance: blockchainAgreement 
+      ? (parseFloat(blockchainAgreement.loanAmount) - (blockchainAgreement.lastPaidMonth * parseFloat(blockchainAgreement.monthlyPayment))).toFixed(6)
+      : '0'
+  };
   
   return (
     <div className="space-y-6">
@@ -312,15 +377,15 @@ const LoanAgreementDetail: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            Loan Agreement {getStatusBadge(agreement.status)}
+            Loan Agreement {getStatusBadge(loanDetails.status)}
           </h1>
           <p className="text-muted-foreground mt-1">
-            Started on {formatDate(agreement.startDate)} · ID: {formatAddress(agreement.id)}
+            Started on {formatDate(loanDetails.startDate)} · ID: {formatAddress(loanDetails.borrower)}
           </p>
         </div>
         <div className="flex flex-col items-end">
-          <span className="text-2xl font-bold">{agreement.loanAmount} ETH</span>
-          <span className="text-muted-foreground">at {agreement.interestRate}% interest</span>
+          <span className="text-2xl font-bold">{loanDetails.loanAmount} ETH</span>
+          <span className="text-muted-foreground">at {loanDetails.interestRate}% interest</span>
         </div>
       </div>
       
@@ -328,7 +393,7 @@ const LoanAgreementDetail: React.FC = () => {
         <TabsList className="grid grid-cols-3 w-full">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="schedule">Payment Schedule</TabsTrigger>
-          <TabsTrigger value="pay" disabled={agreement.status !== 'active' || !isUserBorrower()}>
+          <TabsTrigger value="pay" disabled={loanDetails.status !== 'ACTIVE' || !isUserBorrower()}>
             Make Payment
           </TabsTrigger>
         </TabsList>
@@ -366,13 +431,13 @@ const LoanAgreementDetail: React.FC = () => {
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Borrower:</span>
                         <span className="font-mono text-sm">
-                          {formatAddress(agreement.borrower)}
+                          {formatAddress(loanDetails.borrower)}
                           {isUserBorrower() && ' (You)'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Lender:</span>
-                        <span className="font-mono text-sm">{formatAddress(agreement.lender)}</span>
+                        <span className="font-mono text-sm">{formatAddress(loanDetails.lender)}</span>
                       </div>
                     </div>
                   </div>
@@ -382,10 +447,9 @@ const LoanAgreementDetail: React.FC = () => {
                       <Home className="h-4 w-4 mr-2 text-muted-foreground" /> Collateral Property
                     </h3>
                     <div className="space-y-2">
-                      <p className="mb-2">{agreement.propertyAddress}</p>
                       <div className="flex justify-between text-sm">
                         <span className="text-muted-foreground">Contract:</span>
-                        <span className="font-mono">{formatAddress(agreement.rentalAddress)}</span>
+                        <span className="font-mono">{formatAddress(loanDetails.rentalAddress)}</span>
                       </div>
                     </div>
                   </div>
@@ -399,64 +463,30 @@ const LoanAgreementDetail: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Loan Amount:</span>
-                        <span className="font-medium">{agreement.loanAmount} ETH</span>
+                        <span className="font-medium">{loanDetails.loanAmount} ETH</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Interest Rate:</span>
-                        <span className="font-medium">{agreement.interestRate}%</span>
+                        <span className="font-medium">{loanDetails.interestRate}%</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Duration:</span>
-                        <span className="font-medium">{agreement.loanDuration} months</span>
+                        <span className="font-medium">{loanDetails.duration} months</span>
                       </div>
                       <Separator className="my-1" />
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Monthly Payment:</span>
-                        <span className="font-medium">{agreement.installmentAmount} ETH</span>
+                        <span className="font-medium">{loanDetails.installmentAmount} ETH</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Grace Periods:</span>
-                        <span className="font-medium">
-                          {agreement.gracePeriodsUsed}/{agreement.graceMonths} used
-                        </span>
+                        <span className="text-muted-foreground">Repayment Left:</span>
                       </div>
-                    </div>
-                  </div>
-                  
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <Clock className="h-4 w-4 mr-2 text-muted-foreground" /> Status & Timing
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Start Date:</span>
-                        <span className="font-medium">{formatDate(agreement.startDate)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">End Date:</span>
-                        <span className="font-medium">{formatDate(agreement.endDate)}</span>
-                      </div>
-                      {agreement.nextPaymentDue && (
-                        <>
-                          <Separator className="my-1" />
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Next Payment:</span>
-                            <span className="font-medium">{formatDate(agreement.nextPaymentDue)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Days Remaining:</span>
-                            <span className={`font-medium ${calculateDaysUntilPayment() < 3 ? 'text-amber-500' : ''}`}>
-                              {calculateDaysUntilPayment()} days
-                            </span>
-                          </div>
-                        </>
-                      )}
                     </div>
                   </div>
                 </div>
               </div>
               
-              {agreement.status === 'active' && isUserBorrower() && (
+              {loanDetails.status === 'ACTIVE' && isUserBorrower() && (
                 <div className="mt-4">
                   <Button onClick={() => setActiveTab('pay')}>
                     Make Payment
@@ -478,7 +508,7 @@ const LoanAgreementDetail: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {agreement.payments
+                {payments
                   .filter(payment => payment.status !== 'future')
                   .slice(0, 3)
                   .map((payment, index) => (
@@ -521,7 +551,7 @@ const LoanAgreementDetail: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {agreement.payments.map((payment, index) => (
+                {payments.map((payment, index) => (
                   <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
                     <div>
                       <p className="font-medium">Payment #{index + 1}</p>
@@ -536,57 +566,11 @@ const LoanAgreementDetail: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" /> Loan Terms & Conditions
-              </CardTitle>
-              <CardDescription>
-                Detailed terms and conditions of this loan agreement
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="rounded-lg bg-muted p-4">
-                  <h3 className="font-medium mb-2">Payment Terms</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Payments of {agreement.installmentAmount} ETH are due on the same day each month.
-                    The loan has a total duration of {agreement.loanDuration} months with an interest rate of {agreement.interestRate}%.
-                  </p>
-                </div>
-                
-                <div className="rounded-lg bg-muted p-4">
-                  <h3 className="font-medium mb-2">Grace Periods</h3>
-                  <p className="text-sm text-muted-foreground">
-                    This loan includes {agreement.graceMonths} grace period(s), which allow the borrower to skip payments
-                    when needed. {agreement.gracePeriodsUsed} out of {agreement.graceMonths} have been used so far.
-                  </p>
-                </div>
-                
-                <div className="rounded-lg bg-muted p-4">
-                  <h3 className="font-medium mb-2">Default Conditions</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Failure to make payments on time may result in default. 
-                    In case of default, the lender may have rights to claim the collateral property.
-                  </p>
-                </div>
-                
-                <div className="rounded-lg bg-muted p-4">
-                  <h3 className="font-medium mb-2">Collateral</h3>
-                  <p className="text-sm text-muted-foreground">
-                    This loan is secured by the rental agreement at {agreement.propertyAddress}.
-                    The rental contract address is {formatAddress(agreement.rentalAddress)}.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
         
         {/* Make Payment Tab */}
         <TabsContent value="pay" className="space-y-6 mt-6">
-          {agreement.status !== 'active' ? (
+          {loanDetails.status !== 'ACTIVE' ? (
             <Alert>
               <AlertTitle>This loan is no longer active</AlertTitle>
               <AlertDescription>
@@ -602,8 +586,10 @@ const LoanAgreementDetail: React.FC = () => {
             </Alert>
           ) : (
             <PayLoan 
-              loanAddress={agreement.id}
-              onSuccess={handlePaymentSuccess}
+              loanAddress={loanDetails.borrower}
+              onSuccess={() => {
+                // Handle payment success
+              }}
             />
           )}
         </TabsContent>

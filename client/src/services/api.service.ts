@@ -356,7 +356,11 @@ export const LoanApi = {
     offerId: string
   ): Promise<{ loanAgreement: any; success: boolean; error?: string }> {
     try {
-      const response = await apiCall(`/api/loan/offers/${offerId}/accept`, 'POST', user);
+      const response = await apiCall(`/api/loan/offer/${offerId}/accept`, 'POST', user);
+
+      if (!response || !response.success) {
+        throw new Error(response?.message || 'Failed to accept loan offer');
+      }
 
       return {
         loanAgreement: response?.loanAgreement || null,
@@ -372,13 +376,39 @@ export const LoanApi = {
     }
   },
   
+  // Register a blockchain loan agreement in the database
+  async registerLoanAgreement(
+    user: AppUser,
+    data: {
+      offerId: string;
+      contractAddress: string;
+      transactionHash: string;
+    }
+  ): Promise<{ loanAgreement: any; success: boolean; error?: string }> {
+    try {
+      const response = await apiCall('/api/loan/agreement/register', 'POST', user, data);
+
+      return {
+        loanAgreement: response?.loanAgreement || null,
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error registering loan agreement:', error);
+      return {
+        loanAgreement: null,
+        success: false,
+        error: error.message || 'Failed to register loan agreement',
+      };
+    }
+  },
+  
   // Withdraw a loan offer
   async withdrawLoanOffer(
     user: AppUser,
     offerId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      await apiCall(`/api/loan/offers/${offerId}/withdraw`, 'POST', user);
+      await apiCall(`/api/loan/offer/${offerId}/withdraw`, 'POST', user);
 
       return {
         success: true,
