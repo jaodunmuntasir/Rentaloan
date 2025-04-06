@@ -289,14 +289,22 @@ export const LoanApi = {
   async createLoanRequest(
     user: AppUser,
     data: {
-      rentalAgreementId: string;
-      amount: string;
-      interestRate: number;
+      rentalAgreementAddress: string;
+      requestedAmount: string;
       duration: number;
+      interestRate: number;
     }
   ): Promise<{ loanRequest: any; success: boolean; error?: string }> {
     try {
-      const response = await apiCall('/api/loan/requests', 'POST', user, data);
+      console.log('Creating loan request with data:', JSON.stringify(data));
+      // Ensure we're sending the parameters in the format the server expects
+      const requestData = {
+        rentalAgreementAddress: data.rentalAgreementAddress,
+        requestedAmount: data.requestedAmount,
+        duration: data.duration,
+        interestRate: data.interestRate
+      };
+      const response = await apiCall('/api/loan/request', 'POST', user, requestData);
 
       return {
         loanRequest: response?.loanRequest || null,

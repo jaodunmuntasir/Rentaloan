@@ -1032,7 +1032,7 @@ const LoanRequestDetail: React.FC = () => {
             </Alert>
           ) : (
             <div className="mt-8">
-              <CreateLoanOffer 
+            <CreateLoanOffer 
                 requestData={{
                   amount: loanRequest.amount,
                   interestRate: loanRequest.interestRate,
@@ -1040,8 +1040,8 @@ const LoanRequestDetail: React.FC = () => {
                 }}
                 possibleLoanDuration={calculateRemainingDuration()}
                 isSubmitting={processingAction === 'submitting-offer'}
-                onSubmit={handleOfferSubmit}
-              />
+              onSubmit={handleOfferSubmit}
+            />
             </div>
           )}
               </CardContent>

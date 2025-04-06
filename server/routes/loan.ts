@@ -59,6 +59,7 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
   try {
     // Ensure user is defined
     if (!req.user) {
+      console.log('Unauthorized request - no user found');
       res.status(401).json({ 
         success: false, 
         message: "Unauthorized" 
@@ -66,20 +67,76 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    // Destructure with renamed parameter
-    const { rentalAgreementAddress, requestedAmount, loanDuration, interestRate } = req.body;
+    console.log('----------------------');
+    console.log('POST /loan/request - Raw request body:', req.body);
+    console.log('POST /loan/request - Request headers:', req.headers);
+    console.log('POST /loan/request - Request user:', req.user);
+    console.log('----------------------');
 
-    // Validate required fields
-    if (!rentalAgreementAddress || !requestedAmount || !loanDuration || !interestRate) {
+    // Destructure all possible parameter names
+    const { 
+      rentalAgreementAddress, 
+      rentalAgreementId,
+      requestedAmount, 
+      amount,
+      loanDuration, 
+      duration,
+      interestRate 
+    } = req.body;
+
+    // Use fallbacks for different parameter names
+    const addressToUse = rentalAgreementAddress || rentalAgreementId;
+    const amountToUse = requestedAmount || amount;
+    const durationToUse = loanDuration || duration;
+
+    console.log('Processed parameters:', {
+      addressToUse,
+      amountToUse,
+      durationToUse,
+      interestRate,
+      requestedAmount,
+      duration
+    });
+
+    // Validate required fields with detailed error messages
+    if (!addressToUse) {
+      console.log('Missing rental agreement address');
       res.status(400).json({ 
         success: false, 
-        message: "Missing required fields" 
+        message: "Missing rental agreement address" 
+      });
+      return;
+    }
+    
+    if (!amountToUse) {
+      console.log('Missing amount');
+      res.status(400).json({ 
+        success: false, 
+        message: "Missing amount" 
+      });
+      return;
+    }
+    
+    if (!durationToUse) {
+      console.log('Missing duration');
+      res.status(400).json({ 
+        success: false, 
+        message: "Missing duration" 
+      });
+      return;
+    }
+    
+    if (!interestRate) {
+      console.log('Missing interest rate');
+      res.status(400).json({ 
+        success: false, 
+        message: "Missing interest rate" 
       });
       return;
     }
 
-    // Validate requestedAmount format
-    if (isNaN(parseFloat(requestedAmount)) || parseFloat(requestedAmount) <= 0) {
+    // Validate amount format
+    if (isNaN(parseFloat(amountToUse)) || parseFloat(amountToUse) <= 0) {
       res.status(400).json({ 
         success: false, 
         message: "Invalid amount format" 
@@ -88,7 +145,7 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
     }
 
     // Validate loan duration
-    if (isNaN(loanDuration) || loanDuration < 1) {
+    if (isNaN(durationToUse) || durationToUse < 1) {
       res.status(400).json({
         success: false,
         message: "Loan duration must be at least 1 month"
@@ -117,7 +174,7 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
 
     // Verify user has permission to create loan request for this rental agreement
     const rentalAgreement = await RentalAgreement.findOne({ 
-      where: { contractAddress: rentalAgreementAddress } 
+      where: { contractAddress: addressToUse } 
     });
 
     if (!rentalAgreement) {
@@ -141,8 +198,8 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
     const loanRequest = await LoanRequest.create({
       rentalAgreementId: rentalAgreement.id,
       requesterId: requester.id,
-      amount: requestedAmount,
-      duration: loanDuration,
+      amount: amountToUse,
+      duration: durationToUse,
       interestRate: interestRate,
       status: LoanRequestStatus.OPEN
     });

@@ -206,7 +206,7 @@ const LoanRequestList: React.FC = () => {
               <div>
                 <h3 className="text-lg font-medium">
                   {propertyName}
-                </h3>
+                  </h3>
                 <p className="text-xs text-muted-foreground">
                   Contract: {formatAddress(contractAddress)}
                 </p>
@@ -293,17 +293,17 @@ const LoanRequestList: React.FC = () => {
       
       <div className="grid gap-6">
         <div className="flex flex-col sm:flex-row justify-between gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
               placeholder="Search by property or address..."
-              className="pl-8"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
           <div className="flex flex-row gap-2">
             <Button 
               variant="outline" 
@@ -313,7 +313,7 @@ const LoanRequestList: React.FC = () => {
             >
               Date
               <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
+                  </Button>
             <Button 
               variant="outline" 
               size="sm" 
@@ -322,26 +322,26 @@ const LoanRequestList: React.FC = () => {
             >
               Amount
               <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
-            <Button 
+                  </Button>
+              <Button
               variant="outline" 
-              size="sm" 
+                size="sm"
               onClick={() => toggleSort('duration')}
               className="flex-1 sm:flex-none"
-            >
+              >
               Duration
               <ArrowUpDown className="ml-2 h-4 w-4" />
-            </Button>
+              </Button>
+            </div>
           </div>
-        </div>
         
         <Separator className="my-4" />
         
-        {loading ? (
+          {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Loading loan requests...</p>
-          </div>
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Loading loan requests...</p>
+            </div>
         ) : error ? (
           <Alert variant="destructive">
             <AlertTitle>Error</AlertTitle>
@@ -360,12 +360,12 @@ const LoanRequestList: React.FC = () => {
             <p className="text-muted-foreground mt-2">
               There are no open loan requests available at the moment.
             </p>
-          </div>
-        ) : (
+            </div>
+          ) : (
           <div className="grid gap-4">
-            {filteredAndSortedRequests.map(renderLoanRequestCard)}
-          </div>
-        )}
+              {filteredAndSortedRequests.map(renderLoanRequestCard)}
+            </div>
+          )}
       </div>
     </div>
   );

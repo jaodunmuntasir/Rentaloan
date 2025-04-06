@@ -9,16 +9,12 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Slider } from '../../components/ui/slider';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { Separator } from '../../components/ui/separator';
 import { 
   Loader2, 
   ArrowLeft, 
   DollarSign, 
-  Calendar, 
-  Shield, 
+  Calendar,  
   Percent,
-  Calculator,
-  Home
 } from 'lucide-react';
 
 const RequestCreate: React.FC = () => {
@@ -150,13 +146,27 @@ const RequestCreate: React.FC = () => {
         token: await currentUser.getIdToken()
       };
       
-      // Create loan request via API
-      const response = await LoanApi.createLoanRequest(appUser, {
-        rentalAgreementId: address,
-        amount: loanAmount,
-        duration: loanDuration,
-        interestRate: interestRate
+      console.log('Submitting loan request with:', {
+        address,
+        loanAmount,
+        loanDuration,
+        interestRate
       });
+      
+      // Create the explicit request payload for better debugging
+      const requestPayload = {
+        rentalAgreementAddress: address,
+        requestedAmount: loanAmount,
+        duration: parseInt(loanDuration.toString()), // ensure it's a number
+        interestRate: parseFloat(interestRate.toString()) // ensure it's a number
+      };
+      
+      console.log('Final request payload:', requestPayload);
+      
+      // Create loan request via API
+      const response = await LoanApi.createLoanRequest(appUser, requestPayload);
+      
+      console.log('API response:', response);
       
       if (response && response.loanRequest) {
         // Redirect to the my loan requests list
