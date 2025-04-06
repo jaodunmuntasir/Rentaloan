@@ -25,6 +25,7 @@ import RequestCreate from './pages/loan/RequestCreate';
 import AgreementList from './pages/loan/AgreementList';
 import AgreementDetail from './pages/loan/AgreementDetail';
 import MyRequestsPage from './pages/loan/MyRequests';
+import MyOffersPage from './pages/loan/MyOffers';
 
 // Inline PrivateRoute component
 const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
@@ -83,6 +84,7 @@ function App() {
                   <Route path="agreement/:address" element={<AgreementDetail />} />
                   <Route path="requests" element={<RequestList />} />
                   <Route path="myrequests" element={<MyRequestsPage />} />
+                  <Route path="myoffers" element={<MyOffersPage />} />
                   <Route path="request/create" element={<RequestCreate />} />
                 </Route>
               </Route>

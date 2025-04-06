@@ -67,44 +67,15 @@ const MyRequestsPage: React.FC = () => {
         console.log('Current User:', appUser);
         
         // Fetch loan requests from API
-        const response = await LoanApi.getLoanRequests(appUser);
-        console.log('Response from getLoanRequests:', response);
+        const response = await LoanApi.getMyLoanRequests(appUser);
+        console.log('Response from getMyLoanRequests:', response);
         
         if (response && response.loanRequests) {
-          console.log('All loan requests:', response.loanRequests);
-          
-          // Filter to only show requests created by current user
-          // Use a more lenient filtering approach
-          const myRequests = response.loanRequests.filter((req: any) => {
-            console.log('Checking request:', req);
-            console.log('Request requester:', req.requester);
-            console.log('Current user ID:', appUser.id);
-            
-            // Check various ways the requester ID might be stored
-            const requesterId = req.requester?.id || req.requesterId;
-            const requesterFirebaseId = req.requester?.firebaseId;
-            const requesterEmail = req.requester?.email;
-            
-            console.log('RequesterId:', requesterId);
-            console.log('RequesterFirebaseId:', requesterFirebaseId);
-            console.log('RequesterEmail:', requesterEmail);
-            console.log('User email match:', requesterEmail === appUser.email);
-            
-            return requesterId === appUser.id || 
-                   requesterFirebaseId === appUser.id ||
-                   requesterEmail === appUser.email;
-          });
-          
-          console.log('Filtered requests (my requests):', myRequests);
-          
-          if (myRequests.length > 0) {
-            setLoanRequests(myRequests);
-          } else {
-            console.warn('No requests found for current user. Using all requests instead.');
-            setLoanRequests(response.loanRequests);
-          }
+          console.log('My loan requests:', response.loanRequests);
+          setLoanRequests(response.loanRequests);
         } else {
           console.warn('No loan requests data available for the user');
+          setLoanRequests([]);
         }
       } catch (err) {
         console.error("Error fetching loan requests:", err);

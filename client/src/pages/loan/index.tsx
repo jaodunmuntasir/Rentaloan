@@ -8,12 +8,6 @@ const Loan: React.FC = () => {
   // Navigation items for loan pages
   const loanNavItems = [
     { 
-      path: '/loan/agreements', 
-      label: 'My Loan Agreements', 
-      icon: <FileText className="h-4 w-4" />,
-      description: 'View your active loans'
-    },
-    { 
       path: '/loan/myrequests', 
       label: 'My Loan Requests', 
       icon: <CreditCard className="h-4 w-4" />,
@@ -24,6 +18,12 @@ const Loan: React.FC = () => {
       label: 'Browse Loan Requests', 
       icon: <CreditCard className="h-4 w-4" />,
       description: 'Find loan opportunities'
+    },
+    {
+      path: '/loan/myoffers',
+      label: 'My Loan Offers',
+      icon: <CreditCard className="h-4 w-4" />,
+      description: 'View your loan offers'
     },
   ];
   

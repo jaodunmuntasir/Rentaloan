@@ -178,7 +178,7 @@ export const RentalApi = {
 
 // Loan related API calls
 export const LoanApi = {
-  // Get all loan requests
+  // Get all loan requests (excludes current user's requests, only OPEN status)
   async getLoanRequests(
     user: AppUser
   ): Promise<{ loanRequests: any[]; success: boolean; error?: string }> {
@@ -195,6 +195,48 @@ export const LoanApi = {
         loanRequests: [],
         success: false,
         error: error.message || 'Failed to fetch loan requests',
+      };
+    }
+  },
+
+  // Get loan requests created by the current user
+  async getMyLoanRequests(
+    user: AppUser
+  ): Promise<{ loanRequests: any[]; success: boolean; error?: string }> {
+    try {
+      const response = await apiCall('/api/loan/myrequests', 'GET', user);
+
+      return {
+        loanRequests: response?.loanRequests || [],
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error fetching user loan requests:', error);
+      return {
+        loanRequests: [],
+        success: false,
+        error: error.message || 'Failed to fetch your loan requests',
+      };
+    }
+  },
+
+  // Get loan offers created by the current user
+  async getMyLoanOffers(
+    user: AppUser
+  ): Promise<{ loanOffers: any[]; success: boolean; error?: string }> {
+    try {
+      const response = await apiCall('/api/loan/myoffers', 'GET', user);
+
+      return {
+        loanOffers: response?.loanOffers || [],
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error fetching user loan offers:', error);
+      return {
+        loanOffers: [],
+        success: false,
+        error: error.message || 'Failed to fetch your loan offers',
       };
     }
   },

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoanApi } from '../../services/api.service';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Separator } from '../../components/ui/separator';
 import { Input } from '../../components/ui/input';
@@ -15,22 +16,26 @@ import {
   ArrowUpDown,
   ChevronRight,
   Loader2,
-  Home
+  Home,
+  RefreshCw
 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 
 // Types
 interface LoanRequest {
   id: string;
-  address: string;
-  borrower: string;
-  rentalAddress: string;
-  propertyAddress: string;
-  loanAmount: string;
+  rentalAgreementId: string;
+  rentalAgreement?: {
+    contractAddress: string;
+    name?: string;
+    propertyAddress?: string;
+  };
+  amount: string;
+  duration: number;
   interestRate: number;
-  loanDuration: number;
-  status: 'open' | 'funded' | 'repaying' | 'closed' | 'defaulted';
-  createdAt: Date;
-  offerCount: number;
+  status: string;
+  createdAt: string;
+  offersCount?: number;
 }
 
 const LoanRequestList: React.FC = () => {
@@ -39,94 +44,46 @@ const LoanRequestList: React.FC = () => {
   
   // State
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'duration' | 'offers'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  
-  // Filter by user's own requests
-  const [showMyRequestsOnly, setShowMyRequestsOnly] = useState(false);
   
   // Load loan requests
   useEffect(() => {
     const fetchLoanRequests = async () => {
+      if (!currentUser) return;
+      
       try {
         setLoading(true);
+        setError(null);
         
-        // In a real app, this would be fetched from the blockchain
-        // For now, using mock data
-        const mockLoanRequests: LoanRequest[] = [
-          {
-            id: '1',
-            address: '0x1234567890123456789012345678901234567890',
-            borrower: '0x9876543210987654321098765432109876543210',
-            rentalAddress: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
-            propertyAddress: '123 Main St, New York, NY',
-            loanAmount: '2.5',
-            interestRate: 5.5,
-            loanDuration: 12,
-            status: 'open',
-            createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-            offerCount: 2
-          },
-          {
-            id: '2',
-            address: '0x2345678901234567890123456789012345678901',
-            borrower: '0x8765432109876543210987654321098765432109',
-            rentalAddress: '0xbcdefabcdefabcdefabcdefabcdefabcdefabcde',
-            propertyAddress: '456 Park Ave, Chicago, IL',
-            loanAmount: '3.2',
-            interestRate: 4.75,
-            loanDuration: 18,
-            status: 'funded',
-            createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
-            offerCount: 5
-          },
-          {
-            id: '3',
-            address: '0x3456789012345678901234567890123456789012',
-            borrower: currentUser?.uid || '0x0', // Assuming this is the current user
-            rentalAddress: '0xcdefabcdefabcdefabcdefabcdefabcdefabcdef',
-            propertyAddress: '789 Ocean Blvd, Miami, FL',
-            loanAmount: '1.8',
-            interestRate: 6.0,
-            loanDuration: 9,
-            status: 'open',
-            createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
-            offerCount: 0
-          },
-          {
-            id: '4',
-            address: '0x4567890123456789012345678901234567890123',
-            borrower: '0x6543210987654321098765432109876543210987',
-            rentalAddress: '0xdefabcdefabcdefabcdefabcdefabcdefabcdefa',
-            propertyAddress: '101 Mountain View, Denver, CO',
-            loanAmount: '5.0',
-            interestRate: 4.25,
-            loanDuration: 24,
-            status: 'repaying',
-            createdAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // 14 days ago
-            offerCount: 3
-          },
-          {
-            id: '5',
-            address: '0x5678901234567890123456789012345678901234',
-            borrower: '0x5432109876543210987654321098765432109876',
-            rentalAddress: '0xefabcdefabcdefabcdefabcdefabcdefabcdefab',
-            propertyAddress: '222 Sunset Dr, Los Angeles, CA',
-            loanAmount: '7.5',
-            interestRate: 5.0,
-            loanDuration: 36,
-            status: 'defaulted',
-            createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), // 45 days ago
-            offerCount: 1
-          }
-        ];
+        // Convert Firebase User to App User
+        const appUser = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
         
-        setLoanRequests(mockLoanRequests);
+        console.log('Current User:', appUser);
+        
+        // Fetch loan requests from API - this will exclude the user's own requests
+        const response = await LoanApi.getLoanRequests(appUser);
+        console.log('Response from getLoanRequests:', response);
+        
+        if (response && response.loanRequests) {
+          console.log('Open loan requests:', response.loanRequests);
+          setLoanRequests(response.loanRequests);
+        } else {
+          console.warn('No loan requests data available');
+          setLoanRequests([]);
+        }
       } catch (err) {
         console.error("Error fetching loan requests:", err);
+        setError('Failed to load loan requests. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -142,24 +99,10 @@ const LoanRequestList: React.FC = () => {
       if (searchTerm) {
         const searchLower = searchTerm.toLowerCase();
         return (
-          request.propertyAddress.toLowerCase().includes(searchLower) ||
-          request.address.toLowerCase().includes(searchLower) ||
-          request.loanAmount.includes(searchTerm)
+          request.rentalAgreement?.name?.toLowerCase().includes(searchLower) ||
+          request.rentalAgreement?.contractAddress.toLowerCase().includes(searchLower) ||
+          request.amount.includes(searchTerm)
         );
-      }
-      return true;
-    })
-    .filter(request => {
-      // Filter by status
-      if (statusFilter) {
-        return request.status === statusFilter;
-      }
-      return true;
-    })
-    .filter(request => {
-      // Filter by user's own requests
-      if (showMyRequestsOnly) {
-        return request.borrower === currentUser?.uid;
       }
       return true;
     })
@@ -167,26 +110,26 @@ const LoanRequestList: React.FC = () => {
       // Sort by selected criteria
       if (sortBy === 'date') {
         return sortOrder === 'asc'
-          ? a.createdAt.getTime() - b.createdAt.getTime()
-          : b.createdAt.getTime() - a.createdAt.getTime();
+          ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
       
       if (sortBy === 'amount') {
         return sortOrder === 'asc'
-          ? parseFloat(a.loanAmount) - parseFloat(b.loanAmount)
-          : parseFloat(b.loanAmount) - parseFloat(a.loanAmount);
+          ? parseFloat(a.amount) - parseFloat(b.amount)
+          : parseFloat(b.amount) - parseFloat(a.amount);
       }
       
       if (sortBy === 'duration') {
         return sortOrder === 'asc'
-          ? a.loanDuration - b.loanDuration
-          : b.loanDuration - a.loanDuration;
+          ? a.duration - b.duration
+          : b.duration - a.duration;
       }
       
       if (sortBy === 'offers') {
         return sortOrder === 'asc'
-          ? a.offerCount - b.offerCount
-          : b.offerCount - a.offerCount;
+          ? (a.offersCount || 0) - (b.offersCount || 0)
+          : (b.offersCount || 0) - (a.offersCount || 0);
       }
       
       return 0;
@@ -203,7 +146,8 @@ const LoanRequestList: React.FC = () => {
   };
   
   // Format time from now (e.g. "3 days ago")
-  const formatTimeFromNow = (date: Date) => {
+  const formatTimeFromNow = (dateString: string) => {
+    const date = new Date(dateString);
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -223,18 +167,18 @@ const LoanRequestList: React.FC = () => {
   };
   
   // Get status badge
-  const getStatusBadge = (status: LoanRequest['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'open':
+      case 'OPEN':
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Open</Badge>;
-      case 'funded':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Funded</Badge>;
-      case 'repaying':
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Repaying</Badge>;
-      case 'closed':
+      case 'MATCHED':
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Matched</Badge>;
+      case 'FULFILLED':
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">Fulfilled</Badge>;
+      case 'CLOSED':
         return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Closed</Badge>;
-      case 'defaulted':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Defaulted</Badge>;
+      case 'CANCELLED':
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Cancelled</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -242,61 +186,59 @@ const LoanRequestList: React.FC = () => {
   
   // Create a formatted loan request card
   const renderLoanRequestCard = (request: LoanRequest) => {
+    // Handle various possible data structures
+    const contractAddress = request.rentalAgreement?.contractAddress || 'Unknown';
+    const propertyName = request.rentalAgreement?.name || `Rental Agreement #${request.rentalAgreementId}`;
+    
+    // Format the creation date
+    let createdDate = 'Unknown date';
+    try {
+      createdDate = formatTimeFromNow(request.createdAt);
+    } catch (err) {
+      console.error('Error formatting date:', err);
+    }
+    
     return (
       <Card key={request.id} className="mb-4 hover:border-primary transition-colors">
-        <Link to={`/loan/request/${request.address}`} className="block">
+        <Link to={`/rental/${contractAddress}/loan/request/${request.id}`} className="block">
           <CardContent className="p-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-lg flex items-center">
-                    {parseFloat(request.loanAmount).toFixed(2)} ETH Loan
-                  </h3>
-                  {getStatusBadge(request.status)}
-                </div>
-                <p className="text-sm text-muted-foreground flex items-center">
-                  <Home className="h-3.5 w-3.5 mr-1" />
-                  {request.propertyAddress}
+                <h3 className="text-lg font-medium">
+                  {propertyName}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Contract: {formatAddress(contractAddress)}
                 </p>
               </div>
-              <div className="mt-2 md:mt-0 flex flex-col items-end">
-                <p className="text-sm text-muted-foreground">
-                  Posted {formatTimeFromNow(request.createdAt)}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  ID: {formatAddress(request.address)}
-                </p>
+              
+              <div className="mt-2 md:mt-0">
+                {getStatusBadge(request.status)}
               </div>
             </div>
             
-            <Separator className="my-3" />
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-muted-foreground">Interest Rate</p>
-                <p className="font-medium">{request.interestRate}%</p>
+                <p className="text-muted-foreground text-xs">Amount</p>
+                <p className="font-semibold">{request.amount} ETH</p>
               </div>
+              
               <div>
-                <p className="text-muted-foreground">Duration</p>
-                <p className="font-medium">{request.loanDuration} months</p>
+                <p className="text-muted-foreground text-xs">Duration</p>
+                <p className="font-semibold">{request.duration} months</p>
               </div>
+              
               <div>
-                <p className="text-muted-foreground">Borrower</p>
-                <p className="font-medium font-mono">
-                  {formatAddress(request.borrower)}
-                  {request.borrower === currentUser?.uid && ' (You)'}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Offers</p>
-                <p className="font-medium">{request.offerCount}</p>
+                <p className="text-muted-foreground text-xs">Interest Rate</p>
+                <p className="font-semibold">{request.interestRate}%</p>
               </div>
             </div>
             
-            <div className="flex justify-end mt-3">
-              <Button variant="ghost" size="sm">
-                View Details <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+            <div className="flex justify-between items-center mt-4">
+              <span className="text-xs text-muted-foreground">
+                Posted {createdDate}
+              </span>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Link>
@@ -304,122 +246,127 @@ const LoanRequestList: React.FC = () => {
     );
   };
   
+  // Handle retry button click
+  const handleRetry = () => {
+    setLoading(true);
+    setError(null);
+    // Call the effect again
+    const fetchData = async () => {
+      try {
+        const appUser = {
+          id: currentUser?.uid || '',
+          email: currentUser?.email || '',
+          name: currentUser?.displayName || '',
+          walletAddress: null,
+          token: await currentUser?.getIdToken() || ''
+        };
+        
+        const response = await LoanApi.getLoanRequests(appUser);
+        if (response && response.loanRequests) {
+          setLoanRequests(response.loanRequests);
+        }
+      } catch (err) {
+        console.error("Error retrying fetch:", err);
+        setError('Failed to load loan requests. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (currentUser) fetchData();
+  };
+  
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Loan Requests</h1>
-          <p className="text-muted-foreground">Browse and manage loan requests</p>
+          <h1 className="text-3xl font-bold tracking-tight">Loan Requests</h1>
+          <p className="text-muted-foreground">
+            Browse open loan requests from borrowers
+          </p>
         </div>
-        <Button onClick={() => navigate('/loan/request/create')}>
+        
+        <Button onClick={() => navigate('/loan/create')}>
           <Plus className="mr-2 h-4 w-4" /> Create Loan Request
         </Button>
       </div>
       
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search loan requests..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Filter className="mr-2 h-4 w-4" />
-                    {statusFilter ? `Status: ${statusFilter}` : 'All Statuses'}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setStatusFilter(null)}>
-                    All Statuses
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusFilter('open')}>
-                    Open
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusFilter('funded')}>
-                    Funded
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusFilter('repaying')}>
-                    Repaying
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusFilter('closed')}>
-                    Closed
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setStatusFilter('defaulted')}>
-                    Defaulted
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <ArrowUpDown className="mr-2 h-4 w-4" />
-                    Sort: {sortBy}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => toggleSort('date')}>
-                    Date {sortBy === 'date' && (sortOrder === 'asc' ? '(Oldest)' : '(Newest)')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toggleSort('amount')}>
-                    Amount {sortBy === 'amount' && (sortOrder === 'asc' ? '(Lowest)' : '(Highest)')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toggleSort('duration')}>
-                    Duration {sortBy === 'duration' && (sortOrder === 'asc' ? '(Shortest)' : '(Longest)')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => toggleSort('offers')}>
-                    Offers {sortBy === 'offers' && (sortOrder === 'asc' ? '(Fewest)' : '(Most)')}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              <Button
-                variant={showMyRequestsOnly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowMyRequestsOnly(!showMyRequestsOnly)}
-              >
-                {showMyRequestsOnly ? "My Requests" : "All Requests"}
-              </Button>
-            </div>
+      <div className="grid gap-6">
+        <div className="flex flex-col sm:flex-row justify-between gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search by property or address..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        </CardHeader>
+          
+          <div className="flex flex-row gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => toggleSort('date')}
+              className="flex-1 sm:flex-none"
+            >
+              Date
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => toggleSort('amount')}
+              className="flex-1 sm:flex-none"
+            >
+              Amount
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => toggleSort('duration')}
+              className="flex-1 sm:flex-none"
+            >
+              Duration
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
         
-        <CardContent>
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-10">
-              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-              <p className="text-muted-foreground">Loading loan requests...</p>
-            </div>
-          ) : filteredAndSortedRequests.length === 0 ? (
-            <div className="text-center py-10">
-              <CreditCard className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No loan requests found</h3>
-              <p className="text-muted-foreground mb-6">
-                {searchTerm || statusFilter || showMyRequestsOnly
-                  ? "Try changing your search or filters"
-                  : "No loan requests have been created yet"}
-              </p>
-              <Button onClick={() => navigate('/loan/request/create')}>
-                <Plus className="mr-2 h-4 w-4" /> Create Loan Request
+        <Separator className="my-4" />
+        
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Loading loan requests...</p>
+          </div>
+        ) : error ? (
+          <Alert variant="destructive">
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription className="flex flex-col space-y-2">
+              <p>{error}</p>
+              <Button size="sm" variant="outline" onClick={handleRetry} className="w-fit">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
               </Button>
-            </div>
-          ) : (
-            <div>
-              {filteredAndSortedRequests.map(renderLoanRequestCard)}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </AlertDescription>
+          </Alert>
+        ) : filteredAndSortedRequests.length === 0 ? (
+          <div className="text-center py-12">
+            <CreditCard className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">No Loan Requests Found</h3>
+            <p className="text-muted-foreground mt-2">
+              There are no open loan requests available at the moment.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {filteredAndSortedRequests.map(renderLoanRequestCard)}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

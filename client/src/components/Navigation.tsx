@@ -32,19 +32,29 @@ export const navigationItems: NavigationItem[] = [
     title: 'Loans',
     href: '/loan',
     icon: <Coins className="h-4 w-4" />,
-    // submenu: [
-    //   {
-    //     title: 'My Agreements',
-    //     href: '/loan/agreements',
-    //     description: 'View active loan agreements'
-    //   },
-    //   {
-    //     title: 'Browse Requests',
-    //     href: '/loan/requests',
-    //     description: 'Find loan opportunities',
-    //     badge: 'New'
-    //   },
-    // ]
+    submenu: [
+      {
+        title: 'My Loan Agreements',
+        href: '/loan/agreements',
+        description: 'View active loan agreements'
+      },
+      {
+        title: 'Browse Loan Requests',
+        href: '/loan/requests',
+        description: 'Find loan opportunities'
+      },
+      {
+        title: 'My LoanRequests',
+        href: '/loan/myrequests',
+        description: 'View your loan requests'
+      },
+      {
+        title: 'My Loan Offers',
+        href: '/loan/myoffers',
+        description: 'View your loan offers',
+        // badge: 'New'
+      },
+    ]
   },
   {
     title: 'Profile',

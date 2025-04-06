@@ -184,7 +184,7 @@ router.post('/request', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// Get all loan requests
+// Get all loan requests (excluding the user's own requests, only OPEN status)
 // @ts-ignore
 router.get('/requests', authenticate, async (req: Request, res: Response) => {
   try {
@@ -198,8 +198,12 @@ router.get('/requests', authenticate, async (req: Request, res: Response) => {
     
     console.log('Found user in database:', user.id, user.email);
     
-    // Get all open loan requests with complete user data
+    // Get all open loan requests NOT created by the current user
     const loanRequests = await LoanRequest.findAll({
+      where: {
+        requesterId: { [Op.ne]: user.id }, // exclude requests made by this user
+        status: LoanRequestStatus.OPEN // only show OPEN requests
+      },
       include: [
         { 
           model: RentalAgreement,
@@ -212,7 +216,7 @@ router.get('/requests', authenticate, async (req: Request, res: Response) => {
       ]
     });
     
-    console.log(`Found ${loanRequests.length} loan requests`);
+    console.log(`Found ${loanRequests.length} loan requests not created by user and with OPEN status`);
     
     // Add a simplified version of the requests for logging
     const simplifiedRequests = loanRequests.map(req => ({
@@ -846,6 +850,106 @@ router.post('/agreement/:address/repay', authenticate, async (req: Request, res:
     res.status(500).json({
       message: 'Failed to make loan repayment',
       error: (error as Error).message
+    });
+  }
+});
+
+// Get all loan requests created by the current user
+// @ts-ignore
+router.get('/myrequests', authenticate, async (req: Request, res: Response) => {
+  try {
+    console.log('GET /myrequests - Authenticated user ID:', req.user?.uid);
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      console.log('User not found with Firebase ID:', req.user?.uid);
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    console.log('Found user in database:', user.id, user.email);
+    
+    // Get all loan requests created by the current user
+    const loanRequests = await LoanRequest.findAll({
+      where: {
+        requesterId: user.id // only requests made by this user
+      },
+      include: [
+        { 
+          model: RentalAgreement,
+          include: [
+            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] },
+            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
+          ]
+        },
+        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
+      ]
+    });
+    
+    console.log(`Found ${loanRequests.length} loan requests created by user`);
+    
+    res.json({ 
+      success: true,
+      loanRequests 
+    });
+  } catch (error) {
+    console.error('Error retrieving user loan requests:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve your loan requests',
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+});
+
+// Get all loan offers made by the current user
+// @ts-ignore
+router.get('/myoffers', authenticate, async (req: Request, res: Response) => {
+  try {
+    console.log('GET /myoffers - Authenticated user ID:', req.user?.uid);
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      console.log('User not found with Firebase ID:', req.user?.uid);
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    console.log('Found user in database:', user.id, user.email);
+    
+    // Get all loan offers made by the current user
+    const loanOffers = await LoanOffer.findAll({
+      where: {
+        lenderId: user.id // only offers made by this user
+      },
+      include: [
+        { 
+          model: LoanRequest,
+          include: [
+            { 
+              model: RentalAgreement,
+              include: [
+                { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+                { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+              ]
+            },
+            { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+          ]
+        },
+        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] }
+      ]
+    });
+    
+    console.log(`Found ${loanOffers.length} loan offers made by user`);
+    
+    res.json({ 
+      success: true,
+      loanOffers 
+    });
+  } catch (error) {
+    console.error('Error retrieving user loan offers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve your loan offers',
+      error: error instanceof Error ? error.message : String(error)
     });
   }
 });
