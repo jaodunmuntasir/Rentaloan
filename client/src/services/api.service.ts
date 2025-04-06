@@ -280,7 +280,11 @@ export const LoanApi = {
     }
   ): Promise<{ loanOffer: any; success: boolean; error?: string }> {
     try {
-      const response = await apiCall('/api/loan/offers', 'POST', user, data);
+      const response = await apiCall('/api/loan/offer', 'POST', user, {
+        loanRequestId: data.requestId,
+        interestRate: data.interestRate,
+        offerAmount: data.offerAmount
+      });
 
       return {
         loanOffer: response?.loanOffer || null,

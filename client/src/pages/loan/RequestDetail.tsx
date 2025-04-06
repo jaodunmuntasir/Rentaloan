@@ -21,13 +21,13 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Separator } from "../../components/ui/separator";
-import {
-  Loader2,
-  Home,
-  User,
-  Calendar,
-  Clock,
-  CreditCard,
+import { 
+  Loader2, 
+  Home, 
+  User, 
+  Calendar, 
+  Clock, 
+  CreditCard, 
   DollarSign,
   ArrowLeft,
   CheckCircle,
@@ -52,6 +52,7 @@ interface LoanOffer {
   lender?: Lender;
   interestRate: number;
   duration: number;
+  amount?: string;
   status: string;
   createdAt: string;
 }
@@ -163,7 +164,7 @@ const LoanRequestDetail: React.FC = () => {
         setLoading(false);
         return;
       }
-
+      
       try {
         setLoading(true);
         setError(null);
@@ -202,10 +203,10 @@ const LoanRequestDetail: React.FC = () => {
         setLoading(false);
       }
     };
-
+    
     fetchLoanRequest();
   }, [requestId, currentUser]);
-
+  
   // Calculate monthly payment for a given interest rate and duration
   const calculateMonthlyPayment = (
     amount: string,
@@ -215,18 +216,18 @@ const LoanRequestDetail: React.FC = () => {
     const principal = parseFloat(amount);
     const monthlyInterestRate = interestRate / 100 / 12;
     const numberOfPayments = duration;
-
+    
     if (principal <= 0 || interestRate <= 0 || numberOfPayments <= 0) {
       return "0";
     }
-
+    
     // Monthly payment formula: P * r * (1 + r)^n / ((1 + r)^n - 1)
-    const payment =
+    const payment = 
       (principal *
-        monthlyInterestRate *
+      monthlyInterestRate * 
         Math.pow(1 + monthlyInterestRate, numberOfPayments)) /
       (Math.pow(1 + monthlyInterestRate, numberOfPayments) - 1);
-
+    
     return payment.toFixed(6);
   };
 
@@ -275,7 +276,7 @@ const LoanRequestDetail: React.FC = () => {
 
     return currentSecurityDeposit >= requestedAmount;
   };
-
+  
   // Format address for display (e.g. 0x1234...5678)
   const formatAddress = (address: string) => {
     if (!address) return "Unknown";
@@ -283,7 +284,7 @@ const LoanRequestDetail: React.FC = () => {
       address.length - 4
     )}`;
   };
-
+  
   // Format time from now (e.g. "3 days ago")
   const formatTimeFromNow = (dateString: string) => {
     if (!dateString) return "Unknown date";
@@ -292,7 +293,7 @@ const LoanRequestDetail: React.FC = () => {
     const now = new Date();
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
+    
     if (diffDays === 0) {
       return "Today";
     } else if (diffDays === 1) {
@@ -301,7 +302,7 @@ const LoanRequestDetail: React.FC = () => {
       return `${diffDays} days ago`;
     }
   };
-
+  
   // Get status badge
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -357,56 +358,46 @@ const LoanRequestDetail: React.FC = () => {
         return <Badge variant="outline">Unknown</Badge>;
     }
   };
-
+  
   // Handle offer submission
-  const handleOfferSubmit = async (
-    interestRate: number,
-    duration: number,
-    amount: string
-  ) => {
+  const handleOfferSubmit = async (interestRate: number, duration: number, amount: string) => {
     if (!currentUser || !loanRequest) return;
-
+    
     try {
-      setProcessingAction("submitting-offer");
-
+      setProcessingAction('submitting-offer');
+      
       // Convert Firebase User to App User
       const appUser = {
         id: currentUser.uid,
-        email: currentUser.email || "",
-        name: currentUser.displayName || "",
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
         walletAddress: null,
-        token: await currentUser.getIdToken(),
+        token: await currentUser.getIdToken()
       };
-
+      
       // Submit offer via API
       const response = await LoanApi.createLoanOffer(appUser, {
         requestId: loanRequest.id,
         interestRate,
-        offerAmount: amount,
+        offerAmount: amount
       });
-
+      
       if (response && response.loanOffer) {
-        // Refresh offers by refetching the loan request
-        const updatedData = await LoanApi.getLoanRequest(
-          appUser,
-          loanRequest.id
-        );
-        setLoanOffers(updatedData.loanOffers || []);
-
-        showToast("Loan offer created successfully!", "success");
-        // Switch to offers tab to show the new offer
-        setActiveTab("offers");
+        showToast('Loan offer created successfully!', 'success');
+        
+        // Refresh the entire page to show updated data
+        window.location.reload();
       } else {
-        showToast("Failed to create loan offer", "error");
+        showToast('Failed to create loan offer', 'error');
       }
     } catch (err) {
       console.error("Error creating loan offer:", err);
-      showToast("Failed to create loan offer", "error");
+      showToast('Failed to create loan offer', 'error');
     } finally {
       setProcessingAction(null);
     }
   };
-
+  
   // Handle accept offer
   const handleAcceptOffer = async (offerId: string) => {
     if (!currentUser || !loanRequest) return;
@@ -519,7 +510,7 @@ const LoanRequestDetail: React.FC = () => {
       </div>
     );
   }
-
+  
   if (error || !loanRequest) {
     return (
       <Alert variant="destructive" className="max-w-3xl mx-auto">
@@ -569,7 +560,7 @@ const LoanRequestDetail: React.FC = () => {
       </Alert>
     );
   }
-
+  
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
@@ -595,7 +586,7 @@ const LoanRequestDetail: React.FC = () => {
           </p>
         </div>
       </div>
-
+      
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="details">Details</TabsTrigger>
@@ -606,18 +597,18 @@ const LoanRequestDetail: React.FC = () => {
             <TabsTrigger value="make-offer">Make an Offer</TabsTrigger>
           )}
         </TabsList>
-
+        
         <TabsContent value="details" className="space-y-4 pt-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
                   <Home className="h-5 w-5 mr-2" /> Rental Agreement Details
-                </CardTitle>
+              </CardTitle>
                 <CardDescription>
                   Details of the associated rental agreement
                 </CardDescription>
-              </CardHeader>
+            </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <h4 className="text-sm font-medium mb-2">Rental Agreement</h4>
@@ -632,31 +623,31 @@ const LoanRequestDetail: React.FC = () => {
                     </span>
                   </div>
                 </div>
-
+                
                 {/* Blockchain rental details - Use data directly from blockchain */}
                 {rentalDetails && (
                   <div className="mt-6 space-y-4">
                     <h4 className="font-medium">Rental Agreement Details</h4>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
                             Rent Amount:
                           </span>
                           <span className="font-medium">
                             {rentalDetails.rentAmount} ETH
                           </span>
-                        </div>
-                        <div className="flex justify-between">
+                      </div>
+                      <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
                             Current Security Deposit:
                           </span>
                           <span className="font-medium">
                             {rentalDetails.currentSecurityDeposit} ETH
                           </span>
-                        </div>
-                        <div className="flex justify-between">
+                      </div>
+                      <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
                             Possible Collateral:
                           </span>
@@ -667,19 +658,19 @@ const LoanRequestDetail: React.FC = () => {
                       </div>
 
                       <div className="space-y-2">
-                        <div className="flex justify-between">
+                      <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
                             Due Amount:
                           </span>
                           <span className="font-medium">
                             {loanRequest.amount} ETH
                           </span>
-                        </div>
-                        <div className="flex justify-between">
+                      </div>
+                      <div className="flex justify-between">
                           <span className="text-sm text-muted-foreground">
                             Possible Loan Duration:
                           </span>
-                          <span className="font-medium">
+                        <span className="font-medium">
                             {calculateRemainingDuration()} months
                           </span>
                         </div>
@@ -701,7 +692,7 @@ const LoanRequestDetail: React.FC = () => {
                             )
                               ? "Yes"
                               : "No"}
-                          </span>
+                        </span>
                         </div>
                       </div>
                     </div>
@@ -770,15 +761,15 @@ const LoanRequestDetail: React.FC = () => {
                   <p className="text-xl font-semibold">
                     {loanRequest.duration} months
                   </p>
-                </div>
-
+                  </div>
+                  
                 <div>
                   <p className="text-sm font-medium">Interest Rate</p>
                   <p className="text-xl font-semibold">
                     {loanRequest.interestRate}%
                   </p>
-                </div>
-              </div>
+                      </div>
+                      </div>
 
               <Separator />
 
@@ -798,7 +789,7 @@ const LoanRequestDetail: React.FC = () => {
                         )}{" "}
                         ETH
                       </p>
-                    </div>
+                      </div>
 
                     <div>
                       <p className="text-xs text-muted-foreground">
@@ -818,27 +809,27 @@ const LoanRequestDetail: React.FC = () => {
             </CardContent>
           </Card>
         </TabsContent>
-
+        
         {isUserBorrower() ? (
           <TabsContent value="offers" className="space-y-4 pt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
                   <DollarSign className="h-5 w-5 mr-2" /> Loan Offers
-                </CardTitle>
-                <CardDescription>
+              </CardTitle>
+              <CardDescription>
                   Offers from lenders for your loan request
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
                 {loanOffers.length === 0 ? (
                   <div className="text-center p-6">
                     <p className="text-muted-foreground">
                       No offers yet. Check back later.
                     </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
+                </div>
+              ) : (
+                <div className="space-y-4">
                     {loanOffers.map((offer) => (
                       <Card
                         key={offer.id}
@@ -860,14 +851,14 @@ const LoanRequestDetail: React.FC = () => {
                         </CardHeader>
                         <CardContent className="pb-2">
                           <div className="grid grid-cols-3 gap-4 mb-4">
-                            <div>
+                          <div>
                               <p className="text-xs text-muted-foreground">
                                 Interest Rate
                               </p>
                               <p className="font-medium">
                                 {offer.interestRate}%
-                              </p>
-                            </div>
+                            </p>
+                          </div>
                             <div>
                               <p className="text-xs text-muted-foreground">
                                 Duration
@@ -875,30 +866,40 @@ const LoanRequestDetail: React.FC = () => {
                               <p className="font-medium">
                                 {offer.duration} months
                               </p>
+                          </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Loan Amount
+                              </p>
+                              <p className="font-medium">
+                                {offer.amount} ETH
+                              </p>
                             </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
                               <p className="text-xs text-muted-foreground">
                                 Monthly Payment
                               </p>
                               <p className="font-medium">
                                 {calculateMonthlyPayment(
-                                  loanRequest.amount,
+                                  offer.amount || loanRequest.amount,
                                   offer.interestRate,
                                   offer.duration
                                 )}{" "}
                                 ETH
                               </p>
                             </div>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Offered {formatTimeFromNow(offer.createdAt)}
+                            <div className="text-xs text-muted-foreground">
+                              Offered {formatTimeFromNow(offer.createdAt)}
+                            </div>
                           </div>
                         </CardContent>
                         <CardFooter className="pt-2">
                           {offer.status === "PENDING" &&
                             loanRequest.status === "OPEN" && (
-                              <Button
-                                onClick={() => handleAcceptOffer(offer.id)}
+                            <Button 
+                              onClick={() => handleAcceptOffer(offer.id)}
                                 className="w-full"
                                 disabled={processingAction !== null}
                               >
@@ -911,19 +912,19 @@ const LoanRequestDetail: React.FC = () => {
                                 ) : (
                                   <>
                                     <CheckCircle className="mr-2 h-4 w-4" />
-                                    Accept Offer
+                              Accept Offer
                                   </>
                                 )}
-                              </Button>
-                            )}
+                            </Button>
+                        )}
                         </CardFooter>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         ) : (
           <TabsContent value="make-offer" className="space-y-4 pt-4">
             <Card>
@@ -938,17 +939,17 @@ const LoanRequestDetail: React.FC = () => {
               <CardContent>
                 {userHasOffer() ? (
                   <div className="space-y-4">
-                    <Alert>
+            <Alert>
                       <AlertTitle className="flex items-center">
                         <CheckCircle className="h-4 w-4 mr-2" />
                         You have already made an offer
                       </AlertTitle>
-                      <AlertDescription>
+              <AlertDescription>
                         You have already submitted an offer for this loan
                         request. You cannot edit your offer, but you can
                         withdraw it if it hasn't been accepted yet.
-                      </AlertDescription>
-                    </Alert>
+              </AlertDescription>
+            </Alert>
 
                     {getUserOffer() && (
                       <Card className="border border-muted">
@@ -970,9 +971,19 @@ const LoanRequestDetail: React.FC = () => {
                                 Duration
                               </p>
                               <p className="font-medium">
-                                {getUserOffer()?.duration} months
+                                {getUserOffer()?.duration || loanRequest.duration} months
                               </p>
                             </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                Loan Amount
+                              </p>
+                              <p className="font-medium">
+                                {getUserOffer()?.amount || loanRequest.amount} ETH
+                              </p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
                               <p className="text-xs text-muted-foreground">
                                 Status
@@ -1014,29 +1025,32 @@ const LoanRequestDetail: React.FC = () => {
                   <Alert variant="destructive">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>This loan request is no longer open</AlertTitle>
-                    <AlertDescription>
+              <AlertDescription>
                       You cannot make an offer for this loan request as it has
                       already been fulfilled or closed.
-                    </AlertDescription>
-                  </Alert>
-                ) : (
-                  <CreateLoanOffer
-                    onSubmit={handleOfferSubmit}
-                    requestData={{
-                      amount: loanRequest.amount,
-                      duration: loanRequest.duration,
-                      interestRate: loanRequest.interestRate,
-                    }}
-                    isSubmitting={processingAction === "submitting-offer"}
-                  />
-                )}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="mt-8">
+            <CreateLoanOffer 
+                requestData={{
+                  amount: loanRequest.amount,
+                  interestRate: loanRequest.interestRate,
+                  duration: loanRequest.duration
+                }}
+                possibleLoanDuration={calculateRemainingDuration()}
+                isSubmitting={processingAction === 'submitting-offer'}
+              onSubmit={handleOfferSubmit}
+            />
+            </div>
+          )}
               </CardContent>
             </Card>
-          </TabsContent>
+        </TabsContent>
         )}
       </Tabs>
     </div>
   );
 };
 
-export default LoanRequestDetail;
+export default LoanRequestDetail; 

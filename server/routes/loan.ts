@@ -364,8 +364,9 @@ router.get('/requests/:id', authenticate, async (req: Request, res: Response) =>
           id: offer.id,
           interestRate: offer.interestRate,
           status: offer.status,
-          expirationDate: offer.expirationDate,
           createdAt: offer.createdAt,
+          amount: offer.amount,
+          duration: offer.duration,
           lender: offer.lender ? {
             id: offer.lender.id,
             email: offer.lender.email,
@@ -399,16 +400,22 @@ router.get('/requests/:id', authenticate, async (req: Request, res: Response) =>
 // @ts-ignore
 router.post('/offer', authenticate, async (req: Request, res: Response) => {
   try {
-    const { loanRequestId, interestRate, expirationDays } = req.body;
+    const { loanRequestId, interestRate, offerAmount } = req.body;
     
-    if (!loanRequestId || !interestRate || !expirationDays) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    if (!loanRequestId || !interestRate || offerAmount === undefined) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields: loanRequestId, interestRate, and offerAmount are required' 
+      });
     }
     
     // Find the lender
     const lender = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!lender) {
-      return res.status(404).json({ message: 'Lender not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Lender not found' 
+      });
     }
     
     // Find the loan request
@@ -420,40 +427,69 @@ router.post('/offer', authenticate, async (req: Request, res: Response) => {
     });
     
     if (!loanRequest) {
-      return res.status(404).json({ message: 'Loan request not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Loan request not found' 
+      });
     }
     
     // Check if the loan request is still open
     if (loanRequest.status !== LoanRequestStatus.OPEN) {
-      return res.status(400).json({ message: 'Loan request is no longer open' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Loan request is no longer open' 
+      });
     }
     
-    // Calculate expiration date
-    const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + expirationDays);
+    // Validate offer amount (must be between 20% and 100% of request amount)
+    const requestAmount = parseFloat(loanRequest.amount.toString());
+    const proposedAmount = parseFloat(offerAmount);
+    const minAmount = requestAmount * 0.2; // 20% of requested amount
+    
+    if (proposedAmount < minAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Offer amount must be at least 20% of requested amount (${minAmount} ETH)`
+      });
+    }
+    
+    if (proposedAmount > requestAmount) {
+      return res.status(400).json({
+        success: false,
+        message: `Offer amount cannot exceed requested amount (${requestAmount} ETH)`
+      });
+    }
+    
+    // Use the loan request's duration (must match exactly)
+    const duration = loanRequest.duration;
     
     // Create the loan offer
     const loanOffer = await LoanOffer.create({
       loanRequestId: loanRequest.id,
       lenderId: lender.id,
       interestRate,
-      expirationDate,
+      duration,
+      amount: offerAmount,
+      graceMonths: 0, // Always 0 for loans
       status: LoanOfferStatus.PENDING
     });
     
     res.status(201).json({
+      success: true,
       message: 'Loan offer created successfully',
       loanOffer: {
         id: loanOffer.id,
         loanRequestId: loanOffer.loanRequestId,
         interestRate: loanOffer.interestRate,
-        expirationDate: loanOffer.expirationDate,
+        duration: loanOffer.duration,
+        offerAmount: offerAmount,
         status: loanOffer.status
       }
     });
   } catch (error) {
     console.error('Error creating loan offer:', error);
     res.status(500).json({
+      success: false,
       message: 'Failed to create loan offer',
       error: (error as Error).message
     });

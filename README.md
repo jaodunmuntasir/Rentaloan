@@ -595,6 +595,15 @@ This will start:
 
 You can now access your application at `http://localhost:3000` and the backend API at `http://localhost:5000`.
 
+Running migration:
+npx sequelize-cli migration:generate --name [migration file name]
+example: npx sequelize-cli migration:generate --name add-amount-to-loan-offers
+
+update the file
+
+run the migration 
+npx sequelize-cli db:migrate
+
 ## Security Considerations
 
 1. **Authentication**: Firebase Auth provides secure user authentication
