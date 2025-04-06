@@ -29,26 +29,16 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
   
   // Form state
   const [interestRate, setInterestRate] = useState(requestData.interestRate || 5);
-  const [offerAmount, setOfferAmount] = useState(requestData.amount);
   
-  // Use the fixed duration from the loan request
+  // Use the fixed duration and amount from the loan request
   const duration = requestData.duration;
-  
-  // Calculate minimum offer amount (20% of requested amount)
-  const minOfferAmount = parseFloat(requestData.amount) * 0.2;
+  const offerAmount = requestData.amount;
   
   // Calculated values
   const monthlyPayment = calculateMonthlyPayment(offerAmount, interestRate, duration);
   const totalRepayment = calculateTotalRepayment(monthlyPayment, duration);
   const totalInterest = calculateTotalInterest(offerAmount, totalRepayment);
   const apr = calculateAPR(interestRate);
-  
-  // Validate offer amount is within range
-  const isOfferAmountValid = () => {
-    const amount = parseFloat(offerAmount);
-    const requestAmount = parseFloat(requestData.amount);
-    return amount >= minOfferAmount && amount <= requestAmount;
-  };
   
   // Calculate monthly payment
   function calculateMonthlyPayment(amount: string, interestRate: number, duration: number): string {
@@ -94,31 +84,19 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
     setInterestRate(value[0]);
   };
   
-  // Handle offer amount change
-  const handleOfferAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    if (value === '' || /^\d*\.?\d*$/.test(value)) {
-      setOfferAmount(value);
-    }
-  };
-  
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (isSubmitting) return;
     
-    if (!isOfferAmountValid()) {
-      setError(`Offer amount must be between ${minOfferAmount.toFixed(6)} and ${requestData.amount} ETH`);
-      return;
-    }
-    
     setError(null);
     
     try {
       // If onSubmit callback is provided, call it
       if (onSubmit) {
-        await onSubmit(interestRate, duration, offerAmount);
+        // Always use the requested amount
+        await onSubmit(interestRate, duration, requestData.amount);
       }
     } catch (err) {
       console.error("Error creating loan offer:", err);
@@ -139,7 +117,7 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Loan Amount */}
+            {/* Loan Amount (Read-only) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label htmlFor="offer-amount" className="flex items-center gap-1">
@@ -151,12 +129,12 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
                 id="offer-amount"
                 type="text"
                 value={offerAmount}
-                onChange={handleOfferAmountChange}
-                className={!isOfferAmountValid() ? "border-red-500" : ""}
+                disabled
+                className="bg-muted cursor-not-allowed"
               />
               <p className="text-sm text-muted-foreground">
                 <InfoIcon className="h-3 w-3 inline mr-1" /> 
-                Offer amount must be between {minOfferAmount.toFixed(6)} ETH (20%) and {requestData.amount} ETH (100%)
+                The loan amount is fixed to the requested amount
               </p>
             </div>
             
@@ -236,7 +214,7 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
             </Alert>
           )}
           
-          <Button type="submit" disabled={isSubmitting || !isOfferAmountValid()} className="w-full">
+          <Button type="submit" disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

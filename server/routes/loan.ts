@@ -445,22 +445,14 @@ router.post('/offer', authenticate, async (req: Request, res: Response) => {
       });
     }
     
-    // Validate offer amount (must be between 20% and 100% of request amount)
+    // Validate offer amount (must be exactly equal to the requested amount)
     const requestAmount = parseFloat(loanRequest.amount.toString());
     const proposedAmount = parseFloat(offerAmount);
-    const minAmount = requestAmount * 0.2; // 20% of requested amount
     
-    if (proposedAmount < minAmount) {
+    if (proposedAmount !== requestAmount) {
       return res.status(400).json({
         success: false,
-        message: `Offer amount must be at least 20% of requested amount (${minAmount} ETH)`
-      });
-    }
-    
-    if (proposedAmount > requestAmount) {
-      return res.status(400).json({
-        success: false,
-        message: `Offer amount cannot exceed requested amount (${requestAmount} ETH)`
+        message: `Offer amount must be exactly equal to the requested amount (${requestAmount} ETH)`
       });
     }
     

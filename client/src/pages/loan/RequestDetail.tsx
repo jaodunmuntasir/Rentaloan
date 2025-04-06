@@ -874,8 +874,8 @@ const LoanRequestDetail: React.FC = () => {
                               <p className="font-medium">
                                 {offer.amount} ETH
                               </p>
-                            </div>
                           </div>
+                        </div>
                           <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
                               <p className="text-xs text-muted-foreground">
@@ -933,7 +933,7 @@ const LoanRequestDetail: React.FC = () => {
                   <DollarSign className="h-5 w-5 mr-2" /> Make a Loan Offer
                 </CardTitle>
                 <CardDescription>
-                  Provide loan terms to the borrower
+                  Provide an interest rate for your loan offer. The loan amount and duration are fixed.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1032,7 +1032,7 @@ const LoanRequestDetail: React.FC = () => {
             </Alert>
           ) : (
             <div className="mt-8">
-            <CreateLoanOffer 
+              <CreateLoanOffer 
                 requestData={{
                   amount: loanRequest.amount,
                   interestRate: loanRequest.interestRate,
@@ -1040,8 +1040,8 @@ const LoanRequestDetail: React.FC = () => {
                 }}
                 possibleLoanDuration={calculateRemainingDuration()}
                 isSubmitting={processingAction === 'submitting-offer'}
-              onSubmit={handleOfferSubmit}
-            />
+                onSubmit={handleOfferSubmit}
+              />
             </div>
           )}
               </CardContent>
