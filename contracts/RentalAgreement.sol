@@ -299,8 +299,6 @@ contract RentalAgreement is IRentalAgreement, ReentrancyGuard {
     function updateGracePeriod() internal {
         uint256 calculatedGrace = currentSecurityDeposit / _baseRent;
         
-        // If rental duration is less than the calculated grace period,
-        // set grace period to rental duration - 1
         if (rentalDuration < calculatedGrace) {
             gracePeriod = rentalDuration > 0 ? rentalDuration - 1 : 0;
         } else {

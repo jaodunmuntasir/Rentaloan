@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "./interfaces/IRentalAgreement.sol";
 import "./interfaces/ILoanAgreement.sol";
+import "./interfaces/ILoanAgreementFactory.sol";
 
 /**
  * @title LoanAgreement
@@ -16,15 +17,14 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
     address public borrower;
     address public lender;
     address public rentalContract;
+    address public factory;
     uint256 public loanAmount;
     uint256 public interestRate;
     uint256 public duration;
     uint256 public graceMonths;
     uint256 public collateralAmount;
-    uint256 public startTime;
     uint256 public lastPaidMonth;
     uint256 public monthlyPayment;
-    uint256 public firstPaymentDue;
     
     // Repayment schedule
     mapping(uint256 => bool) public repaymentMade;
@@ -32,8 +32,9 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
     Status private _status;
     
     event LoanStarted(uint256 amount, uint256 collateral);
+    event StatusChanged(Status oldStatus, Status newStatus);
     event RepaymentMade(uint256 month, uint256 amount);
-    event LoanClosed(string reason);
+    event LoanClosed(string reason, Status status);
     
     modifier onlyBorrower() {
         require(msg.sender == borrower, "LoanAgreement: Only borrower can call");
@@ -45,8 +46,14 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         _;
     }
     
-    modifier loanActive() {
-        require(_status == Status.ACTIVE, "LoanAgreement: Loan not active");
+    modifier inStatus(Status requiredStatus) {
+        require(_status == requiredStatus, "LoanAgreement: Invalid loan status");
+        _;
+    }
+    
+    modifier validFactory() {
+        require(ILoanAgreementFactory(factory).isValidLoanContract(address(this)), 
+                "LoanAgreement: Not created by valid factory");
         _;
     }
     
@@ -80,62 +87,96 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         borrower = _borrower;
         lender = _lender;
         rentalContract = _rentalContract;
+        factory = msg.sender; // Store the factory address
         loanAmount = _loanAmount;
         interestRate = _interestRate;
         duration = _duration;
         graceMonths = _graceMonths;
         collateralAmount = _loanAmount;
-        _status = Status.ACTIVE;
-        startTime = block.timestamp;
+        _status = Status.INITIALIZED; // Set by borrower at creation time
+        lastPaidMonth = 0; // No months paid yet
         
-        // Create repayment schedule
-        _createRepaymentSchedule();
+        // Calculate monthly payment at creation time
+        uint256 totalAmount = loanAmount.add(loanAmount.mul(interestRate).div(100));
+        monthlyPayment = totalAmount.div(duration);
+        
+        emit StatusChanged(Status.INITIALIZED, Status.INITIALIZED);
     }
     
     /**
-     * @dev Initialize the loan by withdrawing collateral and sending rent
+     * @dev Fund the loan (called by lender)
      */
-    function initialize() external payable nonReentrant {
-        require(msg.sender == lender, "LoanAgreement: Only lender can initialize");
+    function fundLoan() external payable onlyLender inStatus(Status.INITIALIZED) nonReentrant validFactory {
         require(msg.value == loanAmount, "LoanAgreement: Must send loan amount");
-        require(_status == Status.ACTIVE, "LoanAgreement: Loan already initialized");
         
+        // Update status to READY
+        Status oldStatus = _status;
+        _status = Status.READY;
+        emit StatusChanged(oldStatus, Status.READY);
+        
+        // Proceed to activate the loan
+        _activateLoan();
+    }
+    
+    /**
+     * @dev Activate the loan by withdrawing collateral
+     */
+    function _activateLoan() internal {
         IRentalAgreement rental = IRentalAgreement(rentalContract);
         
         // Check available collateral
         require(rental.getAvailableCollateral() >= collateralAmount, "LoanAgreement: Insufficient collateral available");
         
-        // Withdraw collateral first (follow checks-effects-interactions pattern)
+        // Withdraw collateral
         rental.withdrawCollateral(collateralAmount);
+        
+        // Update status to ACTIVE
+        Status oldStatus = _status;
+        _status = Status.ACTIVE;
+        emit StatusChanged(oldStatus, Status.ACTIVE);
+        
+        // Proceed to pay rental
+        _payRental();
+    }
+    
+    /**
+     * @dev Pay the rental contract with loan amount
+     */
+    function _payRental() internal {
+        IRentalAgreement rental = IRentalAgreement(rentalContract);
         
         // Transfer the loan amount to the rental contract to pay rent
         rental.receiveRentFromLoan{value: loanAmount}(lastPaidMonth + 1);
         
+        // Update lastPaidMonth to 1 since we just paid the first month
+        lastPaidMonth = 1; 
+        
+        // Update status to PAID
+        Status oldStatus = _status;
+        _status = Status.PAID;
+        emit StatusChanged(oldStatus, Status.PAID);
+        
         emit LoanStarted(loanAmount, collateralAmount);
     }
-    
-    /**
-     * @dev Create the repayment schedule
-     */
-    function _createRepaymentSchedule() internal {
-        uint256 totalAmount = loanAmount.add(loanAmount.mul(interestRate).div(100));
-        monthlyPayment = totalAmount.div(duration);
-        firstPaymentDue = startTime + 30 days;
-    }
 
-    function getRepaymentInfo(uint256 month) public view returns (uint256 amount, uint256 dueDate, bool isPaid) {
+    /**
+     * @dev Get repayment information for a specific month
+     * @param month The month to get information for
+     * @return amount The payment amount for the month
+     * @return isPaid Whether the payment has been made
+     */
+    function getRepaymentInfo(uint256 month) public view returns (uint256 amount, bool isPaid) {
         require(month > 0 && month <= duration, "LoanAgreement: Invalid month");
         amount = monthlyPayment;
-        dueDate = firstPaymentDue + ((month - 1) * 30 days);
         isPaid = repaymentMade[month];
-        return (amount, dueDate, isPaid);
+        return (amount, isPaid);
     }
     
     /**
      * @dev Make a loan repayment
      * @param month The month for which the repayment is being made
      */
-    function makeRepayment(uint256 month) external payable nonReentrant loanActive {
+    function makeRepayment(uint256 month) external payable inStatus(Status.PAID) nonReentrant validFactory {
         require(month > lastPaidMonth && month <= duration, "LoanAgreement: Invalid month");
         require(!repaymentMade[month], "LoanAgreement: Already paid for this month");
         
@@ -155,7 +196,7 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         emit RepaymentMade(month, monthlyPayment);
         
         if (month == duration) {
-            _closeLoan("Loan fully repaid");
+            _closeLoanSuccessful("Loan fully repaid");
         }
     }
     
@@ -168,36 +209,45 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
     }
     
     /**
-     * @dev Close the loan
+     * @dev Close the loan when fully repaid
      * @param reason The reason for closing the loan
      */
-    function _closeLoan(string memory reason) internal {
-        if (_status == Status.ACTIVE) {
-            // Update state before external calls
-            _status = Status.CLOSED;
-            
-            IRentalAgreement rental = IRentalAgreement(rentalContract);
-            
-            // Check if loan defaulted
-            if (lastPaidMonth + graceMonths < duration) {
-                // Lender gets the collateral if the borrower defaults
-                (bool success, ) = lender.call{value: collateralAmount}("");
-                require(success, "LoanAgreement: Transfer to lender failed");
-            } else {
-                // Return collateral to the rental agreement
-                rental.returnCollateral{value: collateralAmount}(collateralAmount);
-            }
-            
-            emit LoanClosed(reason);
-        }
+    function _closeLoanSuccessful(string memory reason) internal {
+        // Update status to COMPLETED
+        Status oldStatus = _status;
+        _status = Status.COMPLETED;
+        
+        IRentalAgreement rental = IRentalAgreement(rentalContract);
+        
+        // Return collateral to the rental agreement
+        rental.returnCollateral{value: collateralAmount}(collateralAmount);
+        
+        emit StatusChanged(oldStatus, Status.COMPLETED);
+        emit LoanClosed(reason, Status.COMPLETED);
     }
     
     /**
-     * @dev Close the loan early (can be called by lender)
-     * @param reason The reason for closing the loan early
+     * @dev Close the loan when defaulted
+     * @param reason The reason for closing the loan
      */
-    function closeLoanEarly(string memory reason) external onlyLender loanActive nonReentrant {
-        _closeLoan(reason);
+    function _closeLoanDefaulted(string memory reason) internal {
+        // Update status to DEFAULTED
+        Status oldStatus = _status;
+        _status = Status.DEFAULTED;
+        
+        // Lender gets the collateral if the borrower defaults
+        (bool success, ) = lender.call{value: collateralAmount}("");
+        require(success, "LoanAgreement: Transfer to lender failed");
+        
+        emit StatusChanged(oldStatus, Status.DEFAULTED);
+        emit LoanClosed(reason, Status.DEFAULTED);
+    }
+    
+    /**
+     * @dev Simulate a loan default (for testing purposes)
+     */
+    function simulateDefault() external onlyBorrower inStatus(Status.PAID) validFactory {
+        _closeLoanDefaulted("Loan defaulted (simulated)");
     }
     
     /**
@@ -245,16 +295,33 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
      * @return The repayment amounts and due dates
      */
     function getRepaymentSchedule() external view override returns (uint256[] memory, uint256[] memory) {
-        // Create dynamic arrays on-demand to satisfy the interface
+        // Create dynamic arrays for the schedule
         uint256[] memory amounts = new uint256[](duration);
-        uint256[] memory dueDates = new uint256[](duration);
+        uint256[] memory monthNumbers = new uint256[](duration);
         
         for (uint256 i = 0; i < duration; i++) {
             amounts[i] = monthlyPayment;
-            dueDates[i] = firstPaymentDue + (i * 30 days);
+            monthNumbers[i] = i + 1; // Month numbers start from 1
         }
         
-        return (amounts, dueDates);
+        return (amounts, monthNumbers);
+    }
+    
+    /**
+     * @dev Get detailed payment status for all months
+     * @return monthNumbers The month numbers
+     * @return isPaid Whether each month is paid
+     */
+    function getPaymentStatus() external view returns (uint256[] memory, bool[] memory) {
+        uint256[] memory monthNumbers = new uint256[](duration);
+        bool[] memory isPaid = new bool[](duration);
+        
+        for (uint256 i = 0; i < duration; i++) {
+            monthNumbers[i] = i + 1;
+            isPaid[i] = repaymentMade[i + 1];
+        }
+        
+        return (monthNumbers, isPaid);
     }
     
     /**

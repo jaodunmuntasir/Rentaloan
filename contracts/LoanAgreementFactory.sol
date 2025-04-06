@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./LoanAgreement.sol";
 import "./interfaces/IRentalAgreement.sol";
+import "./interfaces/ILoanAgreement.sol";
 import "./interfaces/ILoanAgreementFactory.sol";
 
 /**
@@ -16,7 +17,7 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
         address borrower;
         address lender;
         uint256 amount;
-        bool active;
+        ILoanAgreement.Status status;
     }
     
     mapping(address => LoanAgreementInfo[]) public borrowerLoans;
@@ -27,7 +28,7 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
     
     /**
      * @dev Create a new loan agreement
-     * @param _borrower The borrower address
+     * @param _lender The lender address
      * @param _rentalContract The rental contract address
      * @param _loanAmount The loan amount
      * @param _interestRate The interest rate
@@ -36,14 +37,14 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
      * @return The address of the new loan agreement
      */
     function createLoanAgreement(
-        address _borrower,
+        address _lender,
         address _rentalContract,
         uint256 _loanAmount,
         uint256 _interestRate,
         uint256 _duration,
         uint256 _graceMonths
     ) external nonReentrant returns (address) {
-        require(_borrower != address(0), "LoanAgreementFactory: Invalid borrower address");
+        require(_lender != address(0), "LoanAgreementFactory: Invalid lender address");
         require(_rentalContract != address(0), "LoanAgreementFactory: Invalid rental contract address");
         require(_loanAmount > 0, "LoanAgreementFactory: Loan amount must be greater than 0");
         require(_duration > 0, "LoanAgreementFactory: Duration must be greater than 0");
@@ -54,10 +55,10 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
         IRentalAgreement rentalContract = IRentalAgreement(_rentalContract);
         require(rentalContract.getAvailableCollateral() >= _loanAmount, "LoanAgreementFactory: Insufficient collateral");
         
-        // Create the loan agreement
+        // Create the loan agreement with msg.sender as the borrower
         LoanAgreement newLoan = new LoanAgreement(
-            _borrower,
-            msg.sender,
+            msg.sender,  // borrower is the caller
+            _lender,     // lender is provided as parameter
             _rentalContract,
             _loanAmount,
             _interestRate,
@@ -71,32 +72,17 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
         // Store loan information
         LoanAgreementInfo memory info = LoanAgreementInfo({
             contractAddress: address(newLoan),
-            borrower: _borrower,
-            lender: msg.sender,
+            borrower: msg.sender,
+            lender: _lender,
             amount: _loanAmount,
-            active: true
+            status: ILoanAgreement.Status.INITIALIZED
         });
         
-        borrowerLoans[_borrower].push(info);
-        lenderLoans[msg.sender].push(info);
+        borrowerLoans[msg.sender].push(info);
+        lenderLoans[_lender].push(info);
         
-        emit LoanAgreementCreated(address(newLoan), _borrower, msg.sender, _loanAmount);
+        emit LoanAgreementCreated(address(newLoan), msg.sender, _lender, _loanAmount);
         return address(newLoan);
-    }
-    
-    /**
-     * @dev Initialize a loan with funding
-     * @param loanContract The loan contract address to initialize
-     */
-    function initializeLoan(address payable loanContract) external payable nonReentrant {
-        require(validLoanContracts[loanContract], "LoanAgreementFactory: Invalid loan contract");
-        
-        LoanAgreement loan = LoanAgreement(loanContract);
-        require(msg.sender == loan.lender(), "LoanAgreementFactory: Only lender can initialize");
-        require(msg.value == loan.loanAmount(), "LoanAgreementFactory: Must send loan amount");
-        
-        // Initialize the loan
-        loan.initialize{value: msg.value}();
     }
     
     /**
@@ -122,6 +108,46 @@ contract LoanAgreementFactory is ILoanAgreementFactory, ReentrancyGuard {
      */
     function getLenderLoans() external view returns (LoanAgreementInfo[] memory) {
         return lenderLoans[msg.sender];
+    }
+    
+    /**
+     * @dev Get the current status of a loan
+     * This function can be called by anyone to get the most up-to-date status
+     * @param loanContract The loan contract address
+     * @return The current status of the loan
+     */
+    function getLoanCurrentStatus(address loanContract) external view returns (ILoanAgreement.Status) {
+        require(validLoanContracts[loanContract], "LoanAgreementFactory: Invalid loan contract");
+        return ILoanAgreement(loanContract).getStatus();
+    }
+    
+    /**
+     * @dev Refresh the status of a specific loan in the factory's records
+     * @param loanContract The loan contract address
+     */
+    function refreshLoanStatus(address loanContract) external {
+        require(validLoanContracts[loanContract], "LoanAgreementFactory: Invalid loan contract");
+        
+        ILoanAgreement loan = ILoanAgreement(loanContract);
+        address borrower = loan.getBorrower();
+        address lender = loan.getLender();
+        ILoanAgreement.Status currentStatus = loan.getStatus();
+        
+        // Update status in borrower's records
+        for (uint i = 0; i < borrowerLoans[borrower].length; i++) {
+            if (borrowerLoans[borrower][i].contractAddress == loanContract) {
+                borrowerLoans[borrower][i].status = currentStatus;
+                break;
+            }
+        }
+        
+        // Update status in lender's records
+        for (uint i = 0; i < lenderLoans[lender].length; i++) {
+            if (lenderLoans[lender][i].contractAddress == loanContract) {
+                lenderLoans[lender][i].status = currentStatus;
+                break;
+            }
+        }
     }
     
     /**

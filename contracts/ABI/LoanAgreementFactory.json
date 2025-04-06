@@ -66,9 +66,9 @@
         "type": "uint256"
       },
       {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
+        "internalType": "enum ILoanAgreement.Status",
+        "name": "status",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
@@ -78,7 +78,7 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "_borrower",
+        "name": "_lender",
         "type": "address"
       },
       {
@@ -145,9 +145,9 @@
             "type": "uint256"
           },
           {
-            "internalType": "bool",
-            "name": "active",
-            "type": "bool"
+            "internalType": "enum ILoanAgreement.Status",
+            "name": "status",
+            "type": "uint8"
           }
         ],
         "internalType": "struct LoanAgreementFactory.LoanAgreementInfo[]",
@@ -185,9 +185,9 @@
             "type": "uint256"
           },
           {
-            "internalType": "bool",
-            "name": "active",
-            "type": "bool"
+            "internalType": "enum ILoanAgreement.Status",
+            "name": "status",
+            "type": "uint8"
           }
         ],
         "internalType": "struct LoanAgreementFactory.LoanAgreementInfo[]",
@@ -201,14 +201,20 @@
   {
     "inputs": [
       {
-        "internalType": "address payable",
+        "internalType": "address",
         "name": "loanContract",
         "type": "address"
       }
     ],
-    "name": "initializeLoan",
-    "outputs": [],
-    "stateMutability": "payable",
+    "name": "getLoanCurrentStatus",
+    "outputs": [
+      {
+        "internalType": "enum ILoanAgreement.Status",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -266,12 +272,25 @@
         "type": "uint256"
       },
       {
-        "internalType": "bool",
-        "name": "active",
-        "type": "bool"
+        "internalType": "enum ILoanAgreement.Status",
+        "name": "status",
+        "type": "uint8"
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "loanContract",
+        "type": "address"
+      }
+    ],
+    "name": "refreshLoanStatus",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

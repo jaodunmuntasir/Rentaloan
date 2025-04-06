@@ -9,7 +9,14 @@ interface ILoanAgreement {
     /**
      * @dev Enum for loan status
      */
-    enum Status { ACTIVE, CLOSED }
+    enum Status { 
+        INITIALIZED,  // Initial state when contract is created by borrower
+        READY,        // After lender sends funds
+        ACTIVE,       // After collateral is withdrawn
+        PAID,         // After loan amount is paid to rental contract
+        COMPLETED,    // Successfully repaid loan
+        DEFAULTED     // Loan went into default
+    }
     
     /**
      * @dev Returns the borrower address
@@ -44,7 +51,7 @@ interface ILoanAgreement {
     /**
      * @dev Returns the repayment schedule
      * @return amounts The repayment amounts
-     * @return dueDates The due dates for the repayments
+     * @return monthNumbers The month numbers for the repayments
      */
-    function getRepaymentSchedule() external view returns (uint256[] memory amounts, uint256[] memory dueDates);
+    function getRepaymentSchedule() external view returns (uint256[] memory amounts, uint256[] memory monthNumbers);
 }
