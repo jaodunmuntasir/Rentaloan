@@ -4,14 +4,19 @@ import { LoanRequest } from './loan-request.model';
 import { LoanOffer } from './loan-offer.model';
 import { RentalAgreement } from './rental-agreement.model';
 
+/**
+ * Status values match the blockchain contract Status enum:
+ * Contract enum: INITIALIZED, READY, ACTIVE, PAID, COMPLETED, DEFAULTED
+ * Database enum: CREATED, PENDING, ACTIVE, FUNDED, COMPLETED, FAILED, CLOSED
+ */
 export enum LoanAgreementStatus {
-  CREATED = 'CREATED',
-  PENDING = 'PENDING',
-  ACTIVE = 'ACTIVE',
-  FUNDED = 'FUNDED',
+  CREATED = 'CREATED',    // Maps to INITIALIZED in blockchain
+  PENDING = 'PENDING',    // Maps to READY in blockchain
+  ACTIVE = 'ACTIVE',      // Maps to ACTIVE in blockchain
+  FUNDED = 'FUNDED',      // Maps to PAID in blockchain
   COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',
-  CLOSED = 'CLOSED'
+  FAILED = 'FAILED',      // Maps to DEFAULTED in blockchain
+  CLOSED = 'CLOSED'       // General closed state
 }
 
 @Table({
@@ -46,15 +51,8 @@ export class LoanAgreement extends Model {
   @BelongsTo(() => LoanOffer)
   loanOffer!: LoanOffer;
 
-  @ForeignKey(() => RentalAgreement)
-  @Column({
-    type: DataType.INTEGER,
-    allowNull: true
-  })
-  rentalAgreementId!: number;
-
-  @BelongsTo(() => RentalAgreement)
-  rentalAgreement!: RentalAgreement;
+  // We access the rental agreement through the loan request relationship
+  // No direct rentalAgreementId foreign key in this table
 
   @ForeignKey(() => User)
   @Column({
@@ -113,10 +111,6 @@ export class LoanAgreement extends Model {
   })
   startDate!: Date;
 
-  @Column({
-    type: DataType.DECIMAL(18, 8),
-    allowNull: false,
-    defaultValue: 0
-  })
-  remainingBalance!: string;
+  // The remainingBalance field doesn't exist in the actual database table
+  // Removing it to match the actual schema
 } 

@@ -101,8 +101,8 @@ const RequestCreate: React.FC = () => {
   // Handle interest rate change
   const handleInterestRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    if (value === '' || (/^\d*\.?\d*$/.test(value) && parseFloat(value) >= 1)) {
-      setInterestRate(parseFloat(value) || 1);
+    if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 1)) {
+      setInterestRate(parseInt(value) || 1);
     }
   };
   
@@ -374,12 +374,14 @@ const RequestCreate: React.FC = () => {
                 </Label>
                 <Input
                   id="interest-rate"
-                  type="text"
+                  type="number"
+                  min="1"
+                  step="1"
                   value={interestRate.toString()}
                   onChange={handleInterestRateChange}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Minimum interest rate is 1%. Lenders may offer different rates.
+                  Interest rate must be a whole number (e.g., 5 for 5%). Minimum interest rate is 1%.
                 </p>
               </div>
             </CardContent>

@@ -3,6 +3,7 @@ import RentalAgreementABI from '../contracts/ABI/RentalAgreement.json';
 import LoanAgreementFactoryABI from '../contracts/ABI/LoanAgreementFactory.json';
 import LoanAgreementABI from '../contracts/ABI/LoanAgreement.json';
 import { User } from '../types/user.types';
+import contractAddresses from '../config/contractAddresses.json';
 
 interface RentalAgreementDetails {
   landlord: string;
@@ -53,7 +54,7 @@ export interface LoanAgreementDetails {
 
 export class BlockchainService {
   private static provider: ethers.Provider;
-  private static factoryAddress: string = process.env.REACT_APP_LOAN_FACTORY_ADDRESS || '';
+  private static factoryAddress: string = contractAddresses.loanAgreementFactory;
 
   private static initialize() {
     if (!this.provider) {
@@ -156,6 +157,16 @@ export class BlockchainService {
     graceMonths: number
   ): Promise<{ contractAddress: string; transactionHash: string }> {
     try {
+      console.log('Creating loan agreement with factory address:', this.factoryAddress);
+      console.log('Parameters:', {
+        lenderAddress,
+        rentalContractAddress,
+        loanAmount,
+        interestRate,
+        duration,
+        graceMonths
+      });
+      
       // Initialize provider and get signer
       const provider = this.initialize();
       // Cast the provider to BrowserProvider which has getSigner
@@ -164,6 +175,7 @@ export class BlockchainService {
       
       // Check if the factory address is set
       if (!this.factoryAddress) {
+        console.error('Factory address is not configured!');
         throw new Error('Loan agreement factory address not configured');
       }
       
@@ -173,22 +185,37 @@ export class BlockchainService {
         LoanAgreementFactoryABI,
         signer
       );
+      
+      console.log('Factory contract instance created');
 
       // Convert loan amount to wei
-      const loanAmountWei = ethers.parseEther(loanAmount);
+      const loanAmountWei = ethers.parseEther(loanAmount.toString());
+      console.log('Loan amount in wei:', loanAmountWei.toString());
+      
+      // Convert interest rate from decimal (4.75) to integer (5) - contract expects 0-100 range
+      const interestRateInt = Math.round(interestRate);
+      console.log('Interest rate converted from', interestRate, 'to', interestRateInt);
+      
+      // Ensure duration and graceMonths are integers
+      const durationInt = Math.round(duration);
+      const graceMonthsInt = Math.round(graceMonths);
+      console.log('Duration:', durationInt, 'Grace months:', graceMonthsInt);
       
       // Create a loan agreement
+      console.log('Submitting transaction to create loan agreement...');
       const tx = await factory.createLoanAgreement(
         lenderAddress,
         rentalContractAddress,
         loanAmountWei,
-        interestRate,
-        duration,
-        graceMonths
+        interestRateInt, // Use integer interest rate for blockchain
+        durationInt, // Use integer duration
+        graceMonthsInt // Use integer grace months
       );
       
+      console.log('Transaction submitted, waiting for confirmation...');
       // Wait for transaction to be mined
       const receipt = await tx.wait();
+      console.log('Transaction confirmed with hash:', receipt.hash);
       
       // Get the loan contract address from event logs
       const event = receipt.logs
@@ -216,6 +243,12 @@ export class BlockchainService {
       };
     } catch (error) {
       console.error('Error creating loan agreement:', error);
+      if (error instanceof Error) {
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        throw new Error(`Failed to create loan agreement on blockchain: ${error.message}`);
+      }
       throw new Error('Failed to create loan agreement on blockchain');
     }
   }
@@ -288,7 +321,7 @@ export class BlockchainService {
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
       
       // Convert loan amount to wei
-      const loanAmountWei = ethers.parseEther(loanAmount);
+      const loanAmountWei = ethers.parseEther(loanAmount.toString());
       
       // Fund the loan
       const tx = await contract.fundLoan({ value: loanAmountWei });
@@ -317,7 +350,7 @@ export class BlockchainService {
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
       
       // Convert amount to wei
-      const amountWei = ethers.parseEther(amount);
+      const amountWei = ethers.parseEther(amount.toString());
       
       // Make the repayment
       const tx = await contract.makeRepayment(month, { value: amountWei });

@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { DollarSign, Loader2, CheckCircle } from 'lucide-react';
+import { DollarSign, Loader2, CheckCircle, FileText, ExternalLink } from 'lucide-react';
 
 interface LoanOffer {
   id: string;
@@ -17,6 +17,7 @@ interface LoanOffer {
   amount?: string;
   status: string;
   createdAt: string;
+  loanAgreementAddress?: string;
 }
 
 interface LoanOffersPanelProps {
@@ -26,6 +27,8 @@ interface LoanOffersPanelProps {
   formatTimeFromNow: (dateString: string) => string;
   calculateMonthlyPayment: (amount: string, interestRate: number, duration: number) => string;
   handleAcceptOffer: (offerId: string) => void;
+  handleCreateLoanAgreement: (offerId: string) => void;
+  handleViewLoanAgreement: (contractAddress: string) => void;
   processingAction: string | null;
   requestAmount: string;
 }
@@ -37,6 +40,8 @@ const LoanOffersPanel: React.FC<LoanOffersPanelProps> = ({
   formatTimeFromNow,
   calculateMonthlyPayment,
   handleAcceptOffer,
+  handleCreateLoanAgreement,
+  handleViewLoanAgreement,
   processingAction,
   requestAmount
 }) => {
@@ -74,6 +79,16 @@ const LoanOffersPanel: React.FC<LoanOffersPanelProps> = ({
                     {offer.status === "ACCEPTED" && (
                       <Badge className="ml-2 bg-green-100 text-green-800">
                         Accepted
+                      </Badge>
+                    )}
+                    {offer.status === "REJECTED" && (
+                      <Badge className="ml-2 bg-red-100 text-red-800">
+                        Rejected
+                      </Badge>
+                    )}
+                    {offer.status === "WITHDRAWN" && (
+                      <Badge className="ml-2 bg-gray-100 text-gray-800">
+                        Withdrawn
                       </Badge>
                     )}
                   </CardTitle>
@@ -125,6 +140,7 @@ const LoanOffersPanel: React.FC<LoanOffersPanelProps> = ({
                   </div>
                 </CardContent>
                 <CardFooter className="pt-2">
+                  {/* Show Accept button for PENDING offers when request is OPEN */}
                   {offer.status === "PENDING" &&
                     loanRequestStatus === "OPEN" && (
                       <Button 
@@ -145,6 +161,41 @@ const LoanOffersPanel: React.FC<LoanOffersPanelProps> = ({
                           </>
                         )}
                       </Button>
+                  )}
+
+                  {/* Show Create Loan Agreement button for ACCEPTED offers without loanAgreementAddress */}
+                  {offer.status === "ACCEPTED" &&
+                    !offer.loanAgreementAddress && (
+                      <Button 
+                        onClick={() => handleCreateLoanAgreement(offer.id)}
+                        className="w-full"
+                        disabled={processingAction !== null}
+                      >
+                        {processingAction ===
+                        `creating-agreement-${offer.id}` ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Creating Loan Agreement...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="mr-2 h-4 w-4" />
+                            Create Loan Agreement
+                          </>
+                        )}
+                      </Button>
+                  )}
+
+                  {/* Show View Loan Agreement button for offers with loanAgreementAddress */}
+                  {offer.loanAgreementAddress && (
+                    <Button 
+                      onClick={() => handleViewLoanAgreement(offer.loanAgreementAddress!)}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      View Loan Agreement
+                    </Button>
                   )}
                 </CardFooter>
               </Card>

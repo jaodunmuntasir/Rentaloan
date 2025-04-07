@@ -81,18 +81,18 @@ This document provides a systematic checklist for manually testing all features 
   - [ ] Rental end date updates after successful extension
 
 - [ ] **Loan Request Creation**
-  - [ ] Renter can create a loan request against their rental property
-  - [ ] System validates eligibility for loan based on rental agreement status
-  - [ ] Renter can specify loan amount and duration
-  - [ ] Collateral calculation works correctly
-  - [ ] Loan request is created and visible in the system
+  - [x] Renter can create a loan request against their rental property
+  - [x] System validates eligibility for loan based on rental agreement status
+  - [x] Renter can specify loan amount and duration
+  - [x] Collateral calculation works correctly
+  - [x] Loan request is created and visible in the system
 
 - [ ] **Loan Offer Management**
-  - [ ] Borrower can view all loan offers for their request
-  - [ ] Offer details show interest rates and terms clearly
-  - [ ] Borrower can compare multiple offers
-  - [ ] Borrower can accept a loan offer
-  - [ ] Borrower receives confirmation after accepting an offer
+  - [x] Borrower can view all loan offers for their request
+  - [x] Offer details show interest rates and terms clearly
+  - [x] Borrower can compare multiple offers
+  - [x] Borrower can accept a loan offer
+  - [x] Borrower receives confirmation after accepting an offer
 
 - [ ] **Loan Repayment**
   - [ ] Borrower can see their active loans
@@ -105,22 +105,22 @@ This document provides a systematic checklist for manually testing all features 
 ## Lender Perspective
 
 - [ ] **Browse Loan Requests**
-  - [ ] Lender can view all open loan requests
-  - [ ] Lender can filter requests by amount, duration, etc.
-  - [ ] Request details show collateral information
+  - [x] Lender can view all open loan requests
+  - [x] Lender can filter requests by amount, duration, etc.
+  - [x] Request details show collateral information
   - [ ] Lender can view borrower reputation/history
 
 - [ ] **Create Loan Offer**
-  - [ ] Lender can select a loan request to make an offer
-  - [ ] Lender can set interest rate and terms
-  - [ ] System calculates monthly payment amounts
-  - [ ] Offer preview shows total interest and repayment amount
-  - [ ] Confirmation is shown after offer submission
+  - [x] Lender can select a loan request to make an offer
+  - [x] Lender can set interest rate and terms
+  - [x] System calculates monthly payment amounts
+  - [x] Offer preview shows total interest and repayment amount
+  - [x] Confirmation is shown after offer submission
 
 - [ ] **Loan Offer Management**
-  - [ ] Lender can view all their submitted offers
-  - [ ] Offer status updates when borrower accepts/rejects
-  - [ ] Lender can withdraw pending offers
+  - [x] Lender can view all their submitted offers
+  - [x] Offer status updates when borrower accepts/rejects
+  - [x] Lender can withdraw pending offers
   - [ ] Lender receives notification when offer is accepted
 
 - [ ] **Loan Agreement Management**

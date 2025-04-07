@@ -28,7 +28,7 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
   const [error, setError] = useState<string | null>(null);
   
   // Form state
-  const [interestRate, setInterestRate] = useState(requestData.interestRate || 5);
+  const [interestRate, setInterestRate] = useState(Math.round(requestData.interestRate || 5));
   
   // Use the fixed duration and amount from the loan request
   const duration = requestData.duration;
@@ -151,7 +151,7 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
                 defaultValue={[interestRate]}
                 min={1}
                 max={20}
-                step={0.25}
+                step={1}
                 onValueChange={handleInterestRateChange}
                 className="my-4"
               />
@@ -164,6 +164,9 @@ const CreateLoanOffer: React.FC<CreateLoanOfferProps> = ({
                   <InfoIcon className="h-3 w-3 inline mr-1" /> Borrower prefers {requestData.interestRate}%
                 </p>
               )}
+              <p className="text-sm text-muted-foreground">
+                <InfoIcon className="h-3 w-3 inline mr-1" /> Interest rate must be a whole number for compatibility with the blockchain
+              </p>
             </div>
           </div>
           

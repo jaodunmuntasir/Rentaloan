@@ -173,7 +173,6 @@ const listenToLoanFactoryEvents = () => {
         // Create a new loan agreement in the database
         await LoanAgreement.create({
           contractAddress,
-          rentalAgreementId: rental.id,
           lenderId: lenderUser.id,
           borrowerId: borrowerUser.id,
           status: LoanAgreementStatus.CREATED,
@@ -508,13 +507,18 @@ const listenToLoanAgreementEvents = async (contractAddress: string) => {
           console.log(`Loan repayment recorded for month ${month} in loan agreement ${contractAddress}`);
           
           // Check if this was the final payment and update loan status if needed
-          // @ts-ignore - Contract method exists at runtime
-          const status = await loanContract.getStatus();
-          if (Number(status) === 1) { // 1 = CLOSED in the contract
-            await loan.update({
-              status: LoanAgreementStatus.CLOSED
-            });
-            console.log(`Loan agreement ${contractAddress} marked as closed`);
+          try {
+            // @ts-ignore - Contract method exists at runtime
+            const status = await loanContract.getStatus();
+            if (Number(status) === 1) { // 1 = CLOSED in the contract
+              await loan.update({
+                status: LoanAgreementStatus.CLOSED
+              });
+              console.log(`Loan agreement ${contractAddress} marked as closed`);
+            }
+          } catch (contractError) {
+            console.error(`Error checking contract status: ${contractError}`);
+            // Continue execution even if we can't check the contract status
           }
         }
       } catch (error) {

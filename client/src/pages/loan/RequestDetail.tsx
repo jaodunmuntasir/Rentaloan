@@ -5,7 +5,7 @@ import { LoanApi } from "../../services/api.service";
 import { useRentalAgreement } from "../../hooks/useRentalAgreement";
 import { useToast } from "../../contexts/ToastContext";
 import { BlockchainService } from "../../services/blockchain.service";
-import {
+import { 
   Tabs,
   TabsContent,
   TabsList,
@@ -40,6 +40,7 @@ interface LoanOffer {
   amount?: string;
   status: string;
   createdAt: string;
+  loanAgreementAddress?: string;
 }
 
 interface LoanRequest {
@@ -102,6 +103,19 @@ const LoanRequestDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
 
+  // Helper to create App User from Firebase User for API calls
+  const createAppUser = async () => {
+    if (!currentUser) return null;
+    
+    return {
+      id: currentUser.uid,
+      email: currentUser.email || "",
+      name: currentUser.displayName || "",
+      walletAddress: null,
+      token: await currentUser.getIdToken(true), // Force token refresh
+    };
+  };
+
   // Helper function to determine if current user is the borrower
   const isUserBorrower = (): boolean => {
     if (!currentUser || !loanRequest) return false;
@@ -138,60 +152,58 @@ const LoanRequestDetail: React.FC = () => {
   }, [rentalAddress, showToast]);
 
   // Fetch loan request details
-  useEffect(() => {
-    const fetchLoanRequest = async () => {
-      if (!requestId) {
-        setError("Loan request ID is missing from URL parameters");
-        setLoading(false);
-        return;
-      }
+  const fetchLoanRequestData = async () => {
+    if (!requestId) {
+      setError("Loan request ID is missing from URL parameters");
+      setLoading(false);
+      return;
+    }
 
-      if (!currentUser) {
-        setError("You must be logged in to view loan request details");
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Convert Firebase User to App User
-        const appUser = {
-          id: currentUser.uid,
-          email: currentUser.email || "",
-          name: currentUser.displayName || "",
-          walletAddress: null,
-          token: await currentUser.getIdToken(true), // Force token refresh
-        };
-
-        console.log("Fetching loan request with ID:", requestId);
-
-        // Fetch loan request details from API
-        const response = await LoanApi.getLoanRequest(appUser, requestId);
-
-        if (response && response.success && response.loanRequest) {
-          setLoanRequest(response.loanRequest);
-          setLoanOffers(response.loanOffers || []);
-          // We'll get availableCollateral from blockchain directly
-        } else {
-          const errorMessage =
-            response.error || "Failed to load loan request data";
-          console.error("Loan request fetch failed:", errorMessage);
-          setError(errorMessage);
-        }
-      } catch (err: any) {
-        console.error("Unexpected error fetching loan request:", err);
-        setError(
-          err.message ||
-            "An unexpected error occurred while fetching loan request details"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (!currentUser) {
+      setError("You must be logged in to view loan request details");
+      setLoading(false);
+      return;
+    }
     
-    fetchLoanRequest();
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Create App User for API call
+      const appUser = await createAppUser();
+      if (!appUser) {
+        throw new Error("Failed to create app user");
+      }
+
+      console.log("Fetching loan request with ID:", requestId);
+
+      // Fetch loan request details from API
+      const response = await LoanApi.getLoanRequest(appUser, requestId);
+
+      if (response && response.success && response.loanRequest) {
+        setLoanRequest(response.loanRequest);
+        setLoanOffers(response.loanOffers || []);
+        // We'll get availableCollateral from blockchain directly
+      } else {
+        const errorMessage =
+          response.error || "Failed to load loan request data";
+        console.error("Loan request fetch failed:", errorMessage);
+        setError(errorMessage);
+      }
+    } catch (err: any) {
+      console.error("Unexpected error fetching loan request:", err);
+      setError(
+        err.message ||
+          "An unexpected error occurred while fetching loan request details"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchLoanRequestData();
   }, [requestId, currentUser]);
   
   // Calculate monthly payment for a given interest rate and duration
@@ -354,26 +366,26 @@ const LoanRequestDetail: React.FC = () => {
       setProcessingAction('submitting-offer');
       
       // Convert Firebase User to App User
-      const appUser = {
-        id: currentUser.uid,
-        email: currentUser.email || '',
-        name: currentUser.displayName || '',
-        walletAddress: null,
-        token: await currentUser.getIdToken()
-      };
+      const appUser = await createAppUser();
+      if (!appUser) {
+        throw new Error("Failed to create app user");
+      }
+      
+      // Ensure interest rate is an integer for blockchain compatibility
+      const interestRateInt = Math.round(interestRate);
       
       // Submit offer via API
       const response = await LoanApi.createLoanOffer(appUser, {
         requestId: loanRequest.id,
-        interestRate,
+        interestRate: interestRateInt,
         offerAmount: amount
       });
       
       if (response && response.loanOffer) {
         showToast('Loan offer created successfully!', 'success');
         
-        // Refresh the entire page to show updated data
-        window.location.reload();
+        // Refresh the data
+        await fetchLoanRequestData();
       } else {
         showToast('Failed to create loan offer', 'error');
       }
@@ -385,52 +397,84 @@ const LoanRequestDetail: React.FC = () => {
     }
   };
   
-  // Handle accept offer
+  // Handle accepting an offer (database only)
   const handleAcceptOffer = async (offerId: string) => {
-    if (!currentUser || !loanRequest || !rentalAddress) return;
+    if (!currentUser || !loanRequest) return;
 
     try {
       setProcessingAction(`accepting-${offerId}`);
-      showToast("Processing loan agreement creation...", "info");
-
-      // Convert Firebase User to App User
-      const appUser = {
-        id: currentUser.uid,
-        email: currentUser.email || "",
-        name: currentUser.displayName || "",
-        walletAddress: null,
-        token: await currentUser.getIdToken(),
-      };
-
-      // Find the offer to accept
-      const offerToAccept = loanOffers.find(offer => offer.id === offerId);
-      if (!offerToAccept) {
-        throw new Error("Offer not found");
+      
+      // Create App User for API call
+      const appUser = await createAppUser();
+      if (!appUser) {
+        throw new Error("Failed to create app user");
       }
 
-      // 1. Accept offer in the database first
+      // Accept offer in the database
       const acceptResponse = await LoanApi.acceptLoanOffer(appUser, offerId);
       if (!acceptResponse.success) {
         throw new Error(acceptResponse.error || "Failed to accept offer in database");
       }
 
-      showToast("Offer accepted. Creating loan agreement on blockchain...", "info");
+      showToast("Offer accepted successfully!", "success");
+      
+      // Refresh data to get updated offer statuses
+      await fetchLoanRequestData();
+    } catch (err) {
+      console.error("Error accepting loan offer:", err);
+      showToast("Failed to accept loan offer", "error");
+    } finally {
+      setProcessingAction(null);
+    }
+  };
 
-      // 2. Create loan agreement on blockchain
+  // Handle creating loan agreement (blockchain)
+  const handleCreateLoanAgreement = async (offerId: string) => {
+    if (!currentUser || !loanRequest || !rentalAddress) return;
+
+    try {
+      setProcessingAction(`creating-agreement-${offerId}`);
+      showToast("Creating loan agreement on blockchain...", "info");
+
+      // Find the offer to use
+      const offerToUse = loanOffers.find(offer => offer.id === offerId);
+      if (!offerToUse) {
+        throw new Error("Offer not found");
+      }
+
+      console.log("Creating loan agreement with offer:", {
+        offerId,
+        lender: offerToUse.lender?.walletAddress,
+        rentalAddress,
+        amount: offerToUse.amount || loanRequest.amount,
+        interestRate: offerToUse.interestRate,
+        duration: offerToUse.duration
+      });
+
+      // Create App User for API call
+      const appUser = await createAppUser();
+      if (!appUser) {
+        throw new Error("Failed to create app user");
+      }
+
+      // Create the loan agreement contract on the blockchain
       try {
-        // Create the loan agreement contract on the blockchain
+        // Ensure amount is a string
+        const amount = (offerToUse.amount || loanRequest.amount).toString();
+        
         const loanAgreementResult = await BlockchainService.createLoanAgreement(
-          offerToAccept.lender?.walletAddress || "", // lender address
+          offerToUse.lender?.walletAddress || "", // lender address
           rentalAddress, // rental contract address
-          offerToAccept.amount || loanRequest.amount, // loan amount
-          offerToAccept.interestRate, // interest rate
-          offerToAccept.duration, // duration
-          0 // grace months (hardcoded to 0 per requirements)
+          amount, // loan amount as string
+          offerToUse.interestRate, // interest rate
+          offerToUse.duration, // duration
+          1 // grace months (hardcoded to 1 for now)
         );
 
         showToast("Loan agreement created on blockchain!", "success");
+        console.log("Loan agreement created:", loanAgreementResult);
 
-        // 3. Register the contract address in our database
+        // Register the contract address in our database
         const registerResponse = await LoanApi.registerLoanAgreement(appUser, {
           offerId,
           contractAddress: loanAgreementResult.contractAddress,
@@ -442,24 +486,33 @@ const LoanRequestDetail: React.FC = () => {
         }
 
         showToast("Loan agreement registered successfully!", "success");
-
-        // Navigate to the loan agreement details
-        navigate(`/loan/agreement/${loanAgreementResult.contractAddress}`);
+        
+        // Update the offer in the state with the new loan agreement address
+        setLoanOffers(prevOffers => 
+          prevOffers.map(offer => 
+            offer.id === offerId 
+              ? { ...offer, loanAgreementAddress: loanAgreementResult.contractAddress } 
+              : offer
+          )
+        );
       } catch (blockchainError) {
         console.error("Blockchain error:", blockchainError);
-        showToast("Error creating loan agreement on blockchain. Please try again.", "error");
-        
-        // Refresh data since the offer is already accepted in the database
-        const updatedData = await LoanApi.getLoanRequest(appUser, loanRequest.id);
-        setLoanRequest(updatedData.loanRequest);
-        setLoanOffers(updatedData.loanOffers || []);
+        throw new Error(blockchainError instanceof Error 
+          ? `Blockchain error: ${blockchainError.message}`
+          : "Unknown blockchain error");
       }
     } catch (err) {
-      console.error("Error accepting loan offer:", err);
-      showToast("Failed to accept loan offer", "error");
+      console.error("Error creating loan agreement:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      showToast(`Failed to create loan agreement: ${errorMessage}`, "error");
     } finally {
       setProcessingAction(null);
     }
+  };
+
+  // Handle navigating to loan agreement details
+  const handleViewLoanAgreement = (contractAddress: string) => {
+    navigate(`/loan/agreement/${contractAddress}`);
   };
 
   // Handle withdraw offer
@@ -469,14 +522,11 @@ const LoanRequestDetail: React.FC = () => {
     try {
       setProcessingAction(`withdrawing-${offerId}`);
 
-      // Convert Firebase User to App User
-      const appUser = {
-        id: currentUser.uid,
-        email: currentUser.email || "",
-        name: currentUser.displayName || "",
-        walletAddress: null,
-        token: await currentUser.getIdToken(),
-      };
+      // Create App User for API call
+      const appUser = await createAppUser();
+      if (!appUser) {
+        throw new Error("Failed to create app user");
+      }
 
       // Withdraw offer via API
       const response = await LoanApi.withdrawLoanOffer(appUser, offerId);
@@ -485,11 +535,7 @@ const LoanRequestDetail: React.FC = () => {
         showToast("Loan offer withdrawn successfully!", "success");
 
         // Refresh data
-        const updatedData = await LoanApi.getLoanRequest(
-          appUser,
-          loanRequest!.id
-        );
-        setLoanOffers(updatedData.loanOffers || []);
+        await fetchLoanRequestData();
       } else {
         showToast("Failed to withdraw loan offer", "error");
       }
@@ -565,7 +611,7 @@ const LoanRequestDetail: React.FC = () => {
         </TabsList>
         
         <TabsContent value="details" className="space-y-4 pt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <RentalAgreementDetailsCard 
               rentalAddress={rentalAddress || ""}
               rentalDetails={rentalDetails}
@@ -582,9 +628,9 @@ const LoanRequestDetail: React.FC = () => {
               formatTimeFromNow={formatTimeFromNow}
               requestCreatedAt={loanRequest.createdAt}
             />
-          </div>
+              </div>
         </TabsContent>
-
+        
         <TabsContent value="terms" className="space-y-4 pt-4">
           <LoanTermsCard 
             amount={loanRequest.amount}
@@ -603,6 +649,8 @@ const LoanRequestDetail: React.FC = () => {
               formatTimeFromNow={formatTimeFromNow}
               calculateMonthlyPayment={calculateMonthlyPayment}
               handleAcceptOffer={handleAcceptOffer}
+              handleCreateLoanAgreement={handleCreateLoanAgreement}
+              handleViewLoanAgreement={handleViewLoanAgreement}
               processingAction={processingAction}
               requestAmount={loanRequest.amount}
             />

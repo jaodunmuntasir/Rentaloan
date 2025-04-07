@@ -11,7 +11,7 @@ import LoanAgreementABI from '../contracts/ABI/LoanAgreement.json';
 // Contract addresses - these would typically come from environment variables or a config file
 const CONTRACT_ADDRESSES = {
   RENTAL_FACTORY: process.env.REACT_APP_RENTAL_FACTORY_ADDRESS || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
-  LOAN_FACTORY: process.env.REACT_APP_LOAN_FACTORY_ADDRESS || '0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9',
+  LOAN_FACTORY: process.env.REACT_APP_LOAN_FACTORY_ADDRESS || '0xe7f1725e7734ce288f8367e1bb143e90bb3f0512',
 };
 
 interface ContractContextType {

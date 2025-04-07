@@ -384,6 +384,24 @@ router.get('/requests/:id', authenticate, async (req: Request, res: Response) =>
       });
       console.log(`Found ${loanOffers.length} loan offers`);
       
+      // Step 6: Check if any offers have associated loan agreements
+      console.log('Step 6: Checking for loan agreements associated with offers');
+      const loanOfferIds = loanOffers.map(offer => offer.id);
+      const loanAgreements = await LoanAgreement.findAll({
+        where: {
+          loanOfferId: { [Op.in]: loanOfferIds }
+        },
+        attributes: ['id', 'contractAddress', 'loanOfferId']
+      });
+      
+      console.log(`Found ${loanAgreements.length} loan agreements for these offers`);
+      
+      // Create a map of offer ID to loan agreement contract address
+      const offerToAgreementMap = loanAgreements.reduce<Record<number, string>>((map, agreement) => {
+        map[agreement.loanOfferId] = agreement.contractAddress;
+        return map;
+      }, {} as Record<number, string>);
+      
       // Return database data only - no blockchain calls
       const responseData = {
         success: true,
@@ -428,6 +446,7 @@ router.get('/requests/:id', authenticate, async (req: Request, res: Response) =>
           createdAt: offer.createdAt,
           amount: offer.amount,
           duration: offer.duration,
+          loanAgreementAddress: offerToAgreementMap[offer.id] || null,
           lender: offer.lender ? {
             id: offer.lender.id,
             email: offer.lender.email,
@@ -651,53 +670,23 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
     );
     console.log(`Rejected other pending offers for this loan request`);
     
-    // Generate a contract address for database purposes only
-    // In a real implementation, this would come from the blockchain
-    const contractAddress = `0x${Math.random().toString(16).substr(2, 40)}`;
-    console.log(`Generated contract address: ${contractAddress}`);
-    
-    try {
-      // Convert loan amount and interest rate to proper formats
-      const amountValue = typeof loanOffer.amount === 'string' ? loanOffer.amount : String(loanOffer.amount);
-      
-      // Create loan agreement in database only
-      const loanAgreement = await LoanAgreement.create({
-        contractAddress,
-        loanRequestId: loanOffer.loanRequestId,
-        loanOfferId: loanOffer.id,
-        borrowerId: loanOffer.loanRequest.requesterId,
-        lenderId: loanOffer.lenderId,
-        rentalAgreementId: loanOffer.loanRequest.rentalAgreementId,
-        amount: amountValue,
+    // Return success response with offer details
+    res.json({
+      success: true,
+      message: 'Loan offer accepted successfully',
+      loanOffer: {
+        id: loanOffer.id,
+        status: LoanOfferStatus.ACCEPTED,
+        amount: loanOffer.amount,
         interestRate: loanOffer.interestRate,
         duration: loanOffer.duration,
-        graceMonths: 0, // Always 0 for loans
-        status: LoanAgreementStatus.ACTIVE,
-        startDate: new Date(),
-        remainingBalance: amountValue
-      });
-      console.log(`Created loan agreement: ${loanAgreement.id}`);
-      
-      res.json({
-        success: true,
-        message: 'Loan offer accepted and agreement created',
-        loanAgreement: {
-          id: loanAgreement.id,
-          contractAddress,
-          amount: loanAgreement.amount,
-          interestRate: loanAgreement.interestRate,
-          duration: loanAgreement.duration,
-          status: loanAgreement.status
+        lender: {
+          id: loanOffer.lender.id,
+          email: loanOffer.lender.email,
+          walletAddress: loanOffer.lender.walletAddress
         }
-      });
-    } catch (createError) {
-      console.error('Error creating loan agreement:', createError);
-      // If there's an error creating the loan agreement, revert the status changes
-      await loanOffer.loanRequest.update({ status: LoanRequestStatus.OPEN });
-      await loanOffer.update({ status: LoanOfferStatus.PENDING });
-      
-      throw createError;
-    }
+      }
+    });
   } catch (error) {
     console.error('Error accepting loan offer:', error);
     if (error instanceof Error) {
@@ -719,6 +708,11 @@ router.post('/offer/:id/accept', authenticate, async (req: Request, res: Respons
 router.post('/agreement/register', authenticate, async (req: Request, res: Response) => {
   try {
     const { offerId, contractAddress, transactionHash } = req.body;
+    console.log(`POST /loan/agreement/register - Request data:`, {
+      offerId, 
+      contractAddress,
+      transactionHash: transactionHash ? transactionHash.substring(0, 10) + '...' : null
+    });
     
     if (!offerId || !contractAddress || !transactionHash) {
       return res.status(400).json({ 
@@ -730,17 +724,27 @@ router.post('/agreement/register', authenticate, async (req: Request, res: Respo
     // Find the user
     const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      console.log('User not found');
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
     }
+    console.log(`User found: ${user.id}, ${user.email}`);
     
-    // Find the loan offer
+    // Find the loan offer with complete details
     const loanOffer = await LoanOffer.findByPk(offerId, {
       include: [
         { 
           model: LoanRequest,
           include: [
-            { model: RentalAgreement },
-            { model: User, as: 'requester' }
+            {
+              model: RentalAgreement,
+              include: [
+                { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+                { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+              ]
+            }
           ]
         },
         { model: User, as: 'lender' }
@@ -748,54 +752,136 @@ router.post('/agreement/register', authenticate, async (req: Request, res: Respo
     });
     
     if (!loanOffer) {
-      return res.status(404).json({ message: 'Loan offer not found' });
+      console.log(`Loan offer with ID ${offerId} not found`);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Loan offer not found' 
+      });
     }
+    console.log(`Loan offer found: ${loanOffer.id}, Status: ${loanOffer.status}`);
     
-    // Check if the user is the requester of the loan or the lender
-    const isRequester = loanOffer.loanRequest.requesterId === user.id;
-    const isLender = loanOffer.lenderId === user.id;
-    
-    if (!isRequester && !isLender) {
-      return res.status(403).json({ message: 'You do not have permission to register this loan agreement' });
+    // Check if the user is the requester of the loan (only the borrower should create the loan)
+    if (loanOffer.loanRequest.requesterId !== user.id) {
+      console.log(`User ${user.id} is not the requester ${loanOffer.loanRequest.requesterId}`);
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Only the loan requester can register a loan agreement' 
+      });
     }
     
     // Confirm the offer is in an ACCEPTED state
     if (loanOffer.status !== LoanOfferStatus.ACCEPTED) {
-      return res.status(400).json({ message: 'Loan offer must be in ACCEPTED state to register a loan agreement' });
+      console.log(`Loan offer is not in ACCEPTED state, current state: ${loanOffer.status}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Loan offer must be in ACCEPTED state to register a loan agreement' 
+      });
     }
     
-    // Create loan agreement in database
-    const loanAgreement = await LoanAgreement.create({
-      contractAddress,
-      loanRequestId: loanOffer.loanRequestId,
-      loanOfferId: loanOffer.id,
-      borrowerId: loanOffer.loanRequest.requesterId,
-      lenderId: loanOffer.lenderId,
-      rentalAgreementId: loanOffer.loanRequest.rentalAgreementId,
-      amount: loanOffer.amount,
-      interestRate: loanOffer.interestRate,
-      duration: loanOffer.duration,
-      graceMonths: loanOffer.graceMonths || 0,
-      status: LoanAgreementStatus.CREATED,
-      startDate: new Date(),
-      remainingBalance: loanOffer.amount
+    // Check if a loan agreement already exists for this offer
+    const existingLoanAgreement = await LoanAgreement.findOne({
+      where: {
+        loanOfferId: loanOffer.id
+      }
     });
     
-    res.json(convertBigIntToString({
-      success: true,
-      message: 'Loan agreement registered successfully',
-      loanAgreement: {
-        id: loanAgreement.id,
-        contractAddress,
-        transactionHash,
-        amount: loanAgreement.amount,
-        interestRate: loanAgreement.interestRate,
-        duration: loanAgreement.duration,
-        status: loanAgreement.status
+    if (existingLoanAgreement) {
+      console.log(`Loan agreement already exists for offer ${loanOffer.id}: ${existingLoanAgreement.contractAddress}`);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'A loan agreement already exists for this offer' 
+      });
+    }
+    
+    console.log('Creating loan agreement in database with contract address:', contractAddress);
+    
+    try {
+      // Get the raw amount value as string
+      const amountString = String(loanOffer.amount);
+      console.log(`Raw loan offer amount: ${loanOffer.amount}, converted to string: ${amountString}`);
+      
+      // No need to validate rental agreement ID as it's not stored in the loan_agreements table
+      // We can access it through the loanRequest relation if needed
+      
+      // Create loan agreement in database - match the exact types expected by the schema
+      const loanAgreementData = {
+        contractAddress: contractAddress,
+        loanRequestId: loanOffer.loanRequestId,
+        loanOfferId: loanOffer.id,
+        borrowerId: loanOffer.loanRequest.requesterId,
+        lenderId: loanOffer.lenderId,
+        amount: amountString,                          // Ensure it's a string
+        interestRate: Number(loanOffer.interestRate),  // Ensure it's a number
+        duration: Number(loanOffer.duration),          // Ensure it's a number
+        graceMonths: 1,                                // As requested - always 1
+        status: LoanAgreementStatus.CREATED           // Enum value
+      };
+      
+      // Log the exact data we're going to insert
+      console.log('Creating loan agreement with data:', JSON.stringify(loanAgreementData, null, 2));
+      
+      try {
+        const loanAgreement = await LoanAgreement.create(loanAgreementData);
+        console.log(`Created loan agreement with ID ${loanAgreement.id} and address ${contractAddress}`);
+        
+        // Record the transaction
+        await Payment.create({
+          loanAgreementId: loanAgreement.id,
+          payerId: loanOffer.loanRequest.requesterId,  // Borrower is creating the contract
+          recipientId: loanOffer.lenderId,             // Lender is the recipient
+          amount: 0,                                   // No actual payment yet, just contract creation
+          txHash: transactionHash,
+          type: PaymentType.CONTRACT_CREATION,
+          paymentDate: new Date()
+        });
+        console.log(`Payment record created for contract creation`);
+        
+        res.status(201).json(convertBigIntToString({
+          success: true,
+          message: 'Loan agreement registered successfully',
+          loanAgreement: {
+            id: loanAgreement.id,
+            contractAddress,
+            transactionHash,
+            amount: loanAgreement.amount,
+            interestRate: loanAgreement.interestRate,
+            duration: loanAgreement.duration,
+            status: loanAgreement.status
+          }
+        }));
+      } catch (createError) {
+        console.error(`Database error when creating loan agreement:`, createError);
+        if (createError instanceof Error) {
+          // Check for specific Sequelize errors
+          if (createError.name === 'SequelizeValidationError') {
+            console.error('Validation error details:', (createError as any).errors);
+          }
+          console.error('Error name:', createError.name);
+          console.error('Error message:', createError.message);
+        }
+        throw createError;
       }
-    }));
+    } catch (dbError) {
+      console.error('Database error while creating loan agreement:', dbError);
+      if (dbError instanceof Error) {
+        console.error('Error name:', dbError.name);
+        console.error('Error message:', dbError.message);
+        if (dbError.stack) {
+          console.error('Error stack:', dbError.stack);
+        }
+      }
+      
+      throw dbError; // Re-throw to the outer catch block
+    }
   } catch (error) {
     console.error('Error registering loan agreement:', error);
+    if (error instanceof Error) {
+      console.error('Error name:', error.name);
+      console.error('Error message:', error.message);
+      if (error.stack) {
+        console.error('Error stack:', error.stack);
+      }
+    }
     res.status(500).json({
       success: false,
       message: 'Failed to register loan agreement',
@@ -822,11 +908,17 @@ router.get('/agreements', authenticate, async (req: Request, res: Response) => {
         ]
       },
       include: [
+        // We can still access RentalAgreement through LoanRequest
         { 
-          model: RentalAgreement,
+          model: LoanRequest,
           include: [
-            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+            { 
+              model: RentalAgreement,
+              include: [
+                { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+                { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+              ]
+            }
           ]
         },
         { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] },
@@ -836,7 +928,64 @@ router.get('/agreements', authenticate, async (req: Request, res: Response) => {
       ]
     });
     
-    res.json(convertBigIntToString({ loanAgreements }));
+    // Transform the agreements to clean objects without circular references
+    const cleanLoanAgreements = loanAgreements.map(agreement => ({
+      id: agreement.id,
+      contractAddress: agreement.contractAddress,
+      status: agreement.status,
+      amount: agreement.amount,
+      interestRate: agreement.interestRate,
+      duration: agreement.duration,
+      graceMonths: agreement.graceMonths,
+      startDate: agreement.startDate,
+      createdAt: agreement.createdAt,
+      updatedAt: agreement.updatedAt,
+      loanRequest: agreement.loanRequest ? {
+        id: agreement.loanRequest.id,
+        amount: agreement.loanRequest.amount,
+        duration: agreement.loanRequest.duration,
+        interestRate: agreement.loanRequest.interestRate,
+        status: agreement.loanRequest.status,
+        rentalAgreement: agreement.loanRequest.rentalAgreement ? {
+          id: agreement.loanRequest.rentalAgreement.id,
+          contractAddress: agreement.loanRequest.rentalAgreement.contractAddress,
+          name: agreement.loanRequest.rentalAgreement.name,
+          status: agreement.loanRequest.rentalAgreement.status,
+          duration: agreement.loanRequest.rentalAgreement.duration,
+          securityDeposit: agreement.loanRequest.rentalAgreement.securityDeposit,
+          baseRent: agreement.loanRequest.rentalAgreement.baseRent,
+          landlord: agreement.loanRequest.rentalAgreement.landlord ? {
+            id: agreement.loanRequest.rentalAgreement.landlord.id,
+            email: agreement.loanRequest.rentalAgreement.landlord.email,
+            walletAddress: agreement.loanRequest.rentalAgreement.landlord.walletAddress
+          } : null,
+          renter: agreement.loanRequest.rentalAgreement.renter ? {
+            id: agreement.loanRequest.rentalAgreement.renter.id,
+            email: agreement.loanRequest.rentalAgreement.renter.email,
+            walletAddress: agreement.loanRequest.rentalAgreement.renter.walletAddress
+          } : null
+        } : null
+      } : null,
+      borrower: agreement.borrower ? {
+        id: agreement.borrower.id,
+        email: agreement.borrower.email,
+        walletAddress: agreement.borrower.walletAddress
+      } : null,
+      lender: agreement.lender ? {
+        id: agreement.lender.id,
+        email: agreement.lender.email,
+        walletAddress: agreement.lender.walletAddress
+      } : null,
+      loanOffer: agreement.loanOffer ? {
+        id: agreement.loanOffer.id,
+        interestRate: agreement.loanOffer.interestRate,
+        status: agreement.loanOffer.status,
+        amount: agreement.loanOffer.amount,
+        duration: agreement.loanOffer.duration
+      } : null
+    }));
+    
+    res.json({ loanAgreements: convertBigIntToString(cleanLoanAgreements) });
   } catch (error) {
     console.error('Error retrieving loan agreements:', error);
     res.status(500).json({
@@ -862,15 +1011,19 @@ router.get('/agreement/:address', authenticate, async (req: Request, res: Respon
       where: { contractAddress: address },
       include: [
         { 
-          model: RentalAgreement,
+          model: LoanRequest,
           include: [
-            { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-            { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+            {
+              model: RentalAgreement,
+              include: [
+                { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+                { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+              ]
+            }
           ]
         },
         { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] },
         { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] },
-        { model: LoanRequest },
         { model: LoanOffer }
       ]
     });
@@ -893,10 +1046,80 @@ router.get('/agreement/:address', authenticate, async (req: Request, res: Respon
       order: [['createdAt', 'DESC']]
     });
     
-    res.json(convertBigIntToString({
-      loanAgreement,
-      payments
+    // Create a clean object with only the data we need
+    const cleanLoanAgreement = {
+      id: loanAgreement.id,
+      contractAddress: loanAgreement.contractAddress,
+      status: loanAgreement.status,
+      amount: loanAgreement.amount,
+      interestRate: loanAgreement.interestRate,
+      duration: loanAgreement.duration,
+      graceMonths: loanAgreement.graceMonths,
+      startDate: loanAgreement.startDate,
+      createdAt: loanAgreement.createdAt,
+      updatedAt: loanAgreement.updatedAt,
+      loanRequest: loanAgreement.loanRequest ? {
+        id: loanAgreement.loanRequest.id,
+        amount: loanAgreement.loanRequest.amount,
+        duration: loanAgreement.loanRequest.duration,
+        interestRate: loanAgreement.loanRequest.interestRate,
+        status: loanAgreement.loanRequest.status,
+        rentalAgreement: loanAgreement.loanRequest.rentalAgreement ? {
+          id: loanAgreement.loanRequest.rentalAgreement.id,
+          contractAddress: loanAgreement.loanRequest.rentalAgreement.contractAddress,
+          name: loanAgreement.loanRequest.rentalAgreement.name,
+          status: loanAgreement.loanRequest.rentalAgreement.status,
+          duration: loanAgreement.loanRequest.rentalAgreement.duration,
+          securityDeposit: loanAgreement.loanRequest.rentalAgreement.securityDeposit,
+          baseRent: loanAgreement.loanRequest.rentalAgreement.baseRent,
+          gracePeriod: loanAgreement.loanRequest.rentalAgreement.gracePeriod,
+          landlord: loanAgreement.loanRequest.rentalAgreement.landlord ? {
+            id: loanAgreement.loanRequest.rentalAgreement.landlord.id,
+            email: loanAgreement.loanRequest.rentalAgreement.landlord.email,
+            walletAddress: loanAgreement.loanRequest.rentalAgreement.landlord.walletAddress
+          } : null,
+          renter: loanAgreement.loanRequest.rentalAgreement.renter ? {
+            id: loanAgreement.loanRequest.rentalAgreement.renter.id,
+            email: loanAgreement.loanRequest.rentalAgreement.renter.email,
+            walletAddress: loanAgreement.loanRequest.rentalAgreement.renter.walletAddress
+          } : null
+        } : null
+      } : null,
+      borrower: loanAgreement.borrower ? {
+        id: loanAgreement.borrower.id,
+        email: loanAgreement.borrower.email,
+        walletAddress: loanAgreement.borrower.walletAddress
+      } : null,
+      lender: loanAgreement.lender ? {
+        id: loanAgreement.lender.id,
+        email: loanAgreement.lender.email,
+        walletAddress: loanAgreement.lender.walletAddress
+      } : null,
+      loanOffer: loanAgreement.loanOffer ? {
+        id: loanAgreement.loanOffer.id,
+        interestRate: loanAgreement.loanOffer.interestRate,
+        status: loanAgreement.loanOffer.status,
+        amount: loanAgreement.loanOffer.amount,
+        duration: loanAgreement.loanOffer.duration
+      } : null
+    };
+    
+    // Create clean payment objects
+    const cleanPayments = payments.map(payment => ({
+      id: payment.id,
+      amount: payment.amount,
+      txHash: payment.txHash,
+      type: payment.type,
+      month: payment.month,
+      paymentDate: payment.paymentDate,
+      createdAt: payment.createdAt
     }));
+    
+    // Convert BigInt values to strings (just in case) and send the response
+    res.json({
+      loanAgreement: convertBigIntToString(cleanLoanAgreement),
+      payments: convertBigIntToString(cleanPayments)
+    });
   } catch (error) {
     console.error('Error retrieving loan agreement:', error);
     res.status(500).json({
@@ -1015,14 +1238,16 @@ router.post('/agreement/:address/repay', authenticate, async (req: Request, res:
       return res.status(400).json({ message: 'Loan is not in funded state' });
     }
     
-    // Calculate remaining balance
-    const remainingBalance = parseFloat(loanAgreement.remainingBalance) - parseFloat(amount);
+    // Update loan agreement status based on payment
+    // Since we don't have remainingBalance, we'll just record the payment
+    // and update the status to COMPLETED if necessary (based on user input or blockchain status)
+    const shouldComplete = req.body.completePayment === true;
     
-    // Update loan agreement status and remaining balance
-    await loanAgreement.update({ 
-      remainingBalance: remainingBalance.toString(),
-      status: remainingBalance <= 0 ? LoanAgreementStatus.COMPLETED : LoanAgreementStatus.FUNDED
-    });
+    if (shouldComplete) {
+      await loanAgreement.update({ 
+        status: LoanAgreementStatus.COMPLETED 
+      });
+    }
     
     // Record the payment
     await Payment.create({
@@ -1038,7 +1263,6 @@ router.post('/agreement/:address/repay', authenticate, async (req: Request, res:
     
     res.json(convertBigIntToString({
       message: 'Loan repayment successful',
-      remainingBalance,
       status: loanAgreement.status
     }));
   } catch (error) {
