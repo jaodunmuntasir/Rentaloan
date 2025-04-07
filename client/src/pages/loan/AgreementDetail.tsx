@@ -5,7 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { BlockchainService, LoanAgreementStatus } from '../../services/blockchain.service';
 import { useAuth } from '../../contexts/AuthContext';
-import {
+import { 
   AgreementHeader,
   LoanSummaryCard,
   PaymentScheduleTab,
@@ -48,8 +48,8 @@ interface LoanAgreementData {
   };
   loanRequest: {
     id: string;
-    rentalAgreement?: {
-      contractAddress: string;
+  rentalAgreement?: {
+    contractAddress: string;
     }
   };
 }
@@ -80,7 +80,7 @@ const LoanAgreementDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [processingAction, setProcessingAction] = useState<string | null>(null);
-
+  
   // Fetch data on component mount
   useEffect(() => {
     const fetchData = async () => {
@@ -89,7 +89,7 @@ const LoanAgreementDetail: React.FC = () => {
         setLoading(false);
         return;
       }
-
+      
       try {
         setLoading(true);
         // Fetch agreement data from database
@@ -151,10 +151,10 @@ const LoanAgreementDetail: React.FC = () => {
         setLoading(false);
       }
     };
-
+    
     fetchData();
   }, [id, showToast, currentUser]);
-
+  
   // Utility functions
   // Calculate repayment progress based on last paid month and total duration
   const calculateProgress = (): number => {
@@ -171,7 +171,7 @@ const LoanAgreementDetail: React.FC = () => {
     if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
-
+  
   // Format date for display
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', {
@@ -180,7 +180,7 @@ const LoanAgreementDetail: React.FC = () => {
       day: 'numeric'
     });
   };
-
+  
   // Calculate days until next payment
   const daysUntilNextPayment = (): number => {
     if (!blockchainAgreement || !payments.length) return 0;
@@ -276,7 +276,7 @@ const LoanAgreementDetail: React.FC = () => {
       
       // Refresh data after successful funding
       setTimeout(() => {
-        window.location.reload();
+      window.location.reload();
       }, 2000);
       
     } catch (err) {
@@ -286,7 +286,7 @@ const LoanAgreementDetail: React.FC = () => {
       setProcessingAction(null);
     }
   };
-
+  
   // Handle simulating a default (for testing)
   const handleSimulateDefault = async () => {
     if (!dbAgreement?.contractAddress) {
@@ -399,7 +399,7 @@ const LoanAgreementDetail: React.FC = () => {
           {getTabs().map(tab => (
             <TabsTrigger key={tab.id} value={tab.id}>
               {tab.label}
-            </TabsTrigger>
+          </TabsTrigger>
           ))}
         </TabsList>
         
@@ -438,7 +438,7 @@ const LoanAgreementDetail: React.FC = () => {
         
         {/* Make Payment Tab */}
         {showRepayButton && (
-          <TabsContent value="pay" className="space-y-6 mt-6">
+        <TabsContent value="pay" className="space-y-6 mt-6">
             <MakePaymentTab
               contractAddress={dbAgreement.contractAddress}
               installmentAmount={loanDetails.installmentAmount}
@@ -472,7 +472,7 @@ const LoanAgreementDetail: React.FC = () => {
               loanStatus={loanDetails.status}
               handleSimulateDefault={handleSimulateDefault}
             />
-          </TabsContent>
+        </TabsContent>
         )}
       </Tabs>
     </div>
