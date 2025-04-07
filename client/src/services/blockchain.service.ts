@@ -362,4 +362,89 @@ export class BlockchainService {
       throw new Error('Failed to make loan repayment on blockchain');
     }
   }
+
+  /**
+   * Simulate a loan default (for testing purposes)
+   * @param contractAddress The loan agreement contract address
+   * @returns The transaction hash
+   */
+  static async simulateDefault(contractAddress: string): Promise<string> {
+    try {
+      const provider = this.initialize();
+      const browserProvider = provider as ethers.BrowserProvider;
+      const signer = await browserProvider.getSigner();
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
+      
+      // Call simulateDefault function
+      const tx = await contract.simulateDefault();
+      const receipt = await tx.wait();
+      
+      return receipt.hash;
+    } catch (error) {
+      console.error('Error simulating loan default:', error);
+      throw new Error('Failed to simulate loan default on blockchain');
+    }
+  }
+
+  /**
+   * Get detailed payment status for all months
+   * @param contractAddress The loan agreement contract address
+   * @returns Array of month numbers and their payment status
+   */
+  static async getPaymentStatus(contractAddress: string): Promise<{monthNumbers: number[], isPaid: boolean[]}> {
+    try {
+      const provider = this.initialize();
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
+      
+      const paymentStatus = await contract.getPaymentStatus();
+      
+      return {
+        monthNumbers: paymentStatus[0].map((month: bigint) => Number(month)),
+        isPaid: paymentStatus[1]
+      };
+    } catch (error) {
+      console.error('Error fetching payment status:', error);
+      throw new Error('Failed to fetch payment status from blockchain');
+    }
+  }
+  
+  /**
+   * Get the repayment info for a specific month
+   * @param contractAddress The loan agreement contract address
+   * @param month The month to check
+   * @returns Object containing payment amount and isPaid status
+   */
+  static async getRepaymentInfo(contractAddress: string, month: number): Promise<{amount: string, isPaid: boolean}> {
+    try {
+      const provider = this.initialize();
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
+      
+      const info = await contract.getRepaymentInfo(month);
+      
+      return {
+        amount: ethers.formatEther(info[0]),
+        isPaid: info[1]
+      };
+    } catch (error) {
+      console.error('Error fetching repayment info:', error);
+      throw new Error('Failed to fetch repayment info from blockchain');
+    }
+  }
+  
+  /**
+   * Get the rental contract address from the loan agreement
+   * @param contractAddress The loan agreement contract address
+   * @returns The rental contract address
+   */
+  static async getRentalContractAddress(contractAddress: string): Promise<string> {
+    try {
+      const provider = this.initialize();
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
+      
+      return await contract.rentalContract();
+    } catch (error) {
+      console.error('Error fetching rental contract address:', error);
+      throw new Error('Failed to fetch rental contract address from blockchain');
+    }
+  }
 } 

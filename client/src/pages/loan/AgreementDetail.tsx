@@ -1,358 +1,336 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useParams } from 'react-router-dom';
+import axios from 'axios';
 import { useToast } from '../../contexts/ToastContext';
-import { LoanApi } from '../../services/api.service';
-import { BlockchainService, LoanAgreementDetails, LoanAgreementStatus } from '../../services/blockchain.service';
-import PayLoan from '../../components/loan/PayLoan';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Badge } from '../../components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { Separator } from '../../components/ui/separator';
-import { 
-  Loader2, 
-  Home, 
-  User, 
-  Calendar, 
-  Clock, 
-  CreditCard, 
-  FileText,
-  ArrowLeft,
-  AlertTriangle,
-  Wallet
-} from 'lucide-react';
+import { BlockchainService, LoanAgreementStatus } from '../../services/blockchain.service';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  AgreementHeader,
+  LoanSummaryCard,
+  PaymentScheduleTab,
+  MakePaymentTab,
+  FundLoanTab,
+  TestFunctionsTab,
+  LoadingState,
+  ErrorState,
+  PaymentStatusBadge
+} from '../../components/loan/agreement';
 
+// Types
 interface Payment {
+  monthNumber: number;
   date: Date;
   amount: string;
-  status: 'pending' | 'paid' | 'missed' | 'future';
+  status: 'paid' | 'due' | 'future';
 }
 
 interface LoanAgreementData {
   id: string;
   contractAddress: string;
-  borrowerId: number;
-  lenderId: number;
+  status: string;
   amount: string;
   interestRate: number;
   duration: number;
   graceMonths: number;
-  status: string;
-  startDate: Date;
-  borrower?: {
-    id: number;
+  startDate: string;
+  borrower: {
+    id: string;
     email: string;
-    walletAddress: string;
-  };
-  lender?: {
-    id: number;
-    email: string;
-    walletAddress: string;
-  };
-  loanRequest?: {
-    id: number;
-    amount: string;
-    duration: number;
-  };
-  loanOffer?: {
-    id: number;
-    amount: string;
-    interestRate: number;
-  };
-  rentalAgreement?: {
-    id: number;
-    contractAddress: string;
     name: string;
+    walletAddress: string;
+  };
+  lender: {
+    id: string;
+    email: string;
+    name: string;
+    walletAddress: string;
+  };
+  loanRequest: {
+    id: string;
+    rentalAgreement?: {
+      contractAddress: string;
+    }
   };
 }
 
+interface PaymentStatus {
+  monthNumber: number;
+  isPaid: boolean;
+}
+
+// Function to fetch loan agreement data from the API
+const fetchLoanAgreementData = async (id: string): Promise<LoanAgreementData> => {
+  const response = await axios.get(`/api/loan/agreement/${id}`);
+  return response.data;
+};
+
+// Main component
 const LoanAgreementDetail: React.FC = () => {
-  const { address } = useParams<{ address: string }>();
-  const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { id } = useParams<{ id: string }>();
   const { showToast } = useToast();
+  const { currentUser } = useAuth();
   
-  const [activeTab, setActiveTab] = useState('overview');
-  const [loading, setLoading] = useState(true);
+  // State variables
   const [dbAgreement, setDbAgreement] = useState<LoanAgreementData | null>(null);
-  const [blockchainAgreement, setBlockchainAgreement] = useState<LoanAgreementDetails | null>(null);
+  const [blockchainAgreement, setBlockchainAgreement] = useState<any>(null);
+  const [rentalContractAddress, setRentalContractAddress] = useState<string>('');
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('overview');
   const [processingAction, setProcessingAction] = useState<string | null>(null);
-  
-  // Fetch agreement details from database and blockchain
+
+  // Fetch data on component mount
   useEffect(() => {
-    const fetchAgreementDetails = async () => {
-      if (!address) {
-        setError('Loan agreement address is required');
+    const fetchData = async () => {
+      if (!id) {
+        setError('Loan agreement ID is missing');
         setLoading(false);
         return;
       }
-      
-      if (!currentUser) {
-        setError('You must be logged in to view this page');
-        setLoading(false);
-        return;
-      }
-      
+
       try {
         setLoading(true);
-        setError(null);
+        // Fetch agreement data from database
+        const dbData = await fetchLoanAgreementData(id);
+        setDbAgreement(dbData);
         
-        // Convert Firebase User to App User
-        const appUser = {
-          id: currentUser.uid,
-          email: currentUser.email || '',
-          name: currentUser.displayName || '',
-          walletAddress: null,
-          token: await currentUser.getIdToken()
-        };
-        
-        // Fetch data from our database
-        const dbResponse = await LoanApi.getLoanAgreement(appUser, address);
-        
-        if (!dbResponse || !dbResponse.loanAgreement) {
-          throw new Error('Failed to fetch loan agreement from database');
+        // Ensure we have a valid contract address
+        if (!dbData.contractAddress) {
+          throw new Error('Contract address not found for this loan agreement');
         }
         
-        setDbAgreement(dbResponse.loanAgreement);
-        
-        // Fetch data from blockchain
         try {
-          const blockchainData = await BlockchainService.getLoanAgreementDetails(address);
+          // Fetch blockchain data
+          const blockchainData = await BlockchainService.getLoanAgreementDetails(dbData.contractAddress);
           setBlockchainAgreement(blockchainData);
           
-          // Generate payment schedule based on blockchain data
-          const generatedPayments: Payment[] = [];
-          const startDate = dbResponse.loanAgreement.startDate ? new Date(dbResponse.loanAgreement.startDate) : new Date();
+          // Get rental contract address
+          const rentalAddress = await BlockchainService.getRentalContractAddress(dbData.contractAddress);
+          setRentalContractAddress(rentalAddress);
           
-          for (let i = 0; i < blockchainData.duration; i++) {
+          // Get payment status
+          const paymentStatusData = await BlockchainService.getPaymentStatus(dbData.contractAddress);
+          
+          // Transform into our format
+          const statusArray = paymentStatusData.monthNumbers.map((month: number, index: number) => ({
+            monthNumber: month,
+            isPaid: paymentStatusData.isPaid[index]
+          }));
+          
+          // Generate payment schedule
+          const schedule: Payment[] = [];
+          const startDate = new Date(dbData.startDate);
+          
+          for (let i = 1; i <= blockchainData.duration; i++) {
             const paymentDate = new Date(startDate);
-            paymentDate.setMonth(paymentDate.getMonth() + i + 1);
+            paymentDate.setMonth(paymentDate.getMonth() + i);
             
-            const monthNumber = i + 1;
-            const isPaid = monthNumber <= blockchainData.lastPaidMonth;
-            const isCurrent = monthNumber === blockchainData.lastPaidMonth + 1;
-            const isFuture = monthNumber > blockchainData.lastPaidMonth + 1;
+            const isPaid = statusArray.find(s => s.monthNumber === i)?.isPaid || false;
+            const isCurrentOrFuture = i > blockchainData.lastPaidMonth;
             
-            let status: 'paid' | 'pending' | 'missed' | 'future' = 'future';
-            if (isPaid) {
-              status = 'paid';
-            } else if (isCurrent) {
-              status = 'pending';
-            } else if (isFuture) {
-              status = 'future';
-            }
-            
-            generatedPayments.push({
+            schedule.push({
+              monthNumber: i,
               date: paymentDate,
               amount: blockchainData.monthlyPayment,
-              status
+              status: isPaid ? 'paid' : isCurrentOrFuture ? 'future' : 'due'
             });
           }
           
-          setPayments(generatedPayments);
+          setPayments(schedule);
         } catch (blockchainError) {
           console.error('Error fetching blockchain data:', blockchainError);
-          // We still have DB data, so continue but show a warning
           showToast('Could not fetch real-time data from blockchain', 'warning');
+        } finally {
+          setLoading(false);
         }
       } catch (err) {
-        console.error("Error fetching loan agreement details:", err);
-        setError('Failed to load loan agreement details');
-      } finally {
+        console.error('Error fetching loan agreement details:', err);
+        setError('Failed to load loan agreement details. Please try again.');
         setLoading(false);
       }
     };
-    
-    fetchAgreementDetails();
-  }, [address, currentUser, showToast]);
-  
-  // Calculate repayment progress percentage
+
+    fetchData();
+  }, [id, showToast, currentUser]);
+
+  // Utility functions
+  // Calculate repayment progress based on last paid month and total duration
   const calculateProgress = (): number => {
     if (!blockchainAgreement) return 0;
     
-    const paidAmount = blockchainAgreement.lastPaidMonth * parseFloat(blockchainAgreement.monthlyPayment);
-    const totalAmount = parseFloat(blockchainAgreement.loanAmount) * (1 + (blockchainAgreement.interestRate / 100));
+    const { lastPaidMonth, duration } = blockchainAgreement;
+    if (duration === 0) return 0;
     
-    return Math.min(100, Math.round((paidAmount / totalAmount) * 100));
+    return (lastPaidMonth / duration) * 100;
   };
-  
-  // Format address for display (e.g. 0x1234...5678)
-  const formatAddress = (address: string) => {
-    return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+
+  // Format blockchain address with ellipsis
+  const formatAddress = (address: string): string => {
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
-  
+
   // Format date for display
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString('en-US', {
+      year: 'numeric',
       month: 'short',
-      day: 'numeric',
-      year: 'numeric'
+      day: 'numeric'
     });
   };
-  
+
   // Calculate days until next payment
-  const daysUntilNextPayment = (): number | null => {
-    const pendingPayment = payments.find(p => p.status === 'pending');
-    if (!pendingPayment) return null;
+  const daysUntilNextPayment = (): number => {
+    if (!blockchainAgreement || !payments.length) return 0;
     
-    const now = new Date();
-    const dueDate = pendingPayment.date;
-    const diffTime = Math.abs(dueDate.getTime() - now.getTime());
+    const nextPaymentMonth = blockchainAgreement.lastPaidMonth + 1;
+    if (nextPaymentMonth > blockchainAgreement.duration) return 0;
+    
+    const nextPayment = payments.find(p => p.monthNumber === nextPaymentMonth);
+    if (!nextPayment) return 0;
+    
+    const today = new Date();
+    const paymentDate = new Date(nextPayment.date);
+    const diffTime = paymentDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    return diffDays;
+    return diffDays > 0 ? diffDays : 0;
   };
-  
-  // Get loan status badge
-  const getStatusBadge = (status: LoanAgreementStatus | string) => {
-    let statusText = '';
-    let className = '';
+
+  // Check if current user is the borrower
+  const isUserBorrower = (): boolean => {
+    if (!currentUser || !dbAgreement || !dbAgreement.borrower) return false;
     
-    // If it's a string (from DB), convert to enum (from blockchain)
-    const statusValue = typeof status === 'string' 
-      ? status 
-      : Object.keys(LoanAgreementStatus)[status as number];
-    
-    switch (statusValue) {
-      case 'INITIALIZED':
-      case String(LoanAgreementStatus.INITIALIZED):
-        statusText = 'Initialized';
-        className = 'bg-yellow-100 text-yellow-800 border-yellow-200';
-        break;
-      case 'READY':
-      case String(LoanAgreementStatus.READY):
-        statusText = 'Ready';
-        className = 'bg-blue-100 text-blue-800 border-blue-200';
-        break;
-      case 'ACTIVE':
-      case String(LoanAgreementStatus.ACTIVE):
-        statusText = 'Active';
-        className = 'bg-green-100 text-green-800 border-green-200';
-        break;
-      case 'PAID':
-      case String(LoanAgreementStatus.PAID):
-        statusText = 'Paid';
-        className = 'bg-indigo-100 text-indigo-800 border-indigo-200';
-        break;
-      case 'COMPLETED':
-      case String(LoanAgreementStatus.COMPLETED):
-        statusText = 'Completed';
-        className = 'bg-purple-100 text-purple-800 border-purple-200';
-        break;
-      case 'DEFAULTED':
-      case String(LoanAgreementStatus.DEFAULTED):
-        statusText = 'Defaulted';
-        className = 'bg-red-100 text-red-800 border-red-200';
-        break;
-      default:
-        statusText = 'Unknown';
-        className = 'bg-gray-100 text-gray-800 border-gray-200';
+    // Check wallet address if available in blockchain data
+    if (blockchainAgreement?.borrower) {
+      const userWalletAddress = (currentUser as any).walletAddress?.toLowerCase();
+      return userWalletAddress === blockchainAgreement.borrower.toLowerCase();
     }
     
-    return <Badge className={className}>{statusText}</Badge>;
+    // Fallback to database ID check
+    return (currentUser as any).id === dbAgreement.borrower.id;
   };
-  
-  // Get payment status badge
-  const getPaymentStatusBadge = (status: Payment['status']) => {
-    switch (status) {
-      case 'paid':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
-      case 'pending':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pending</Badge>;
-      case 'missed':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Missed</Badge>;
-      case 'future':
-        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Upcoming</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
+
+  // Check if current user is the lender
+  const isUserLender = (): boolean => {
+    if (!currentUser || !dbAgreement || !dbAgreement.lender) return false;
+    
+    // Check wallet address if available in blockchain data
+    if (blockchainAgreement?.lender) {
+      const userWalletAddress = (currentUser as any).walletAddress?.toLowerCase();
+      return userWalletAddress === blockchainAgreement.lender.toLowerCase();
     }
+    
+    // Fallback to database ID check
+    return (currentUser as any).id === dbAgreement.lender.id;
   };
-  
+
+  // Action handlers
   // Handle payment submission
   const handlePayment = async (month: number, amount: string) => {
-    if (!address || !currentUser || !blockchainAgreement) return;
+    if (!dbAgreement?.contractAddress) {
+      showToast("Contract address not found", "error");
+      return;
+    }
     
     try {
       setProcessingAction('payment');
+      const txHash = await BlockchainService.makeRepayment(
+        dbAgreement.contractAddress,
+        month,
+        amount
+      );
       
-      // Make payment on blockchain
-      const txHash = await BlockchainService.makeRepayment(address, month, amount);
+      showToast(`Payment successful! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Update backend with payment info
-      const appUser = {
-        id: currentUser.uid,
-        email: currentUser.email || '',
-        name: currentUser.displayName || '',
-        walletAddress: null,
-        token: await currentUser.getIdToken()
-      };
+      // Refresh data after successful payment
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
       
-      await LoanApi.makeRepayment(appUser, address, month, amount, txHash);
-      
-      showToast('Payment successful!', 'success');
-      
-      // Refresh page data
-      window.location.reload();
     } catch (err) {
-      console.error('Error making loan payment:', err);
-      showToast('Failed to make payment', 'error');
+      console.error('Payment error:', err);
+      showToast(err instanceof Error ? err.message : "Unknown error occurred", "error");
     } finally {
       setProcessingAction(null);
     }
   };
-  
-  // Determine if user is the borrower
-  const isUserBorrower = (): boolean => {
-    if (!currentUser || !blockchainAgreement) return false;
-    return blockchainAgreement.borrower.toLowerCase() === currentUser.uid.toLowerCase();
+
+  // Handle funding the loan
+  const handleFundLoan = async () => {
+    if (!dbAgreement?.contractAddress || !blockchainAgreement) {
+      showToast("Contract details not found", "error");
+      return;
+    }
+    
+    try {
+      setProcessingAction('fundLoan');
+      const txHash = await BlockchainService.fundLoan(
+        dbAgreement.contractAddress,
+        blockchainAgreement.loanAmount
+      );
+      
+      showToast(`Loan funded successfully! Transaction hash: ${formatAddress(txHash)}`, "success");
+      
+      // Refresh data after successful funding
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Funding error:', err);
+      showToast(err instanceof Error ? err.message : "Unknown error occurred", "error");
+    } finally {
+      setProcessingAction(null);
+    }
   };
-  
-  // Determine if user is the lender
-  const isUserLender = (): boolean => {
-    if (!currentUser || !blockchainAgreement) return false;
-    return blockchainAgreement.lender.toLowerCase() === currentUser.uid.toLowerCase();
+
+  // Handle simulating a default (for testing)
+  const handleSimulateDefault = async () => {
+    if (!dbAgreement?.contractAddress) {
+      showToast("Contract address not found", "error");
+      return;
+    }
+    
+    try {
+      setProcessingAction('simulateDefault');
+      const txHash = await BlockchainService.simulateDefault(
+        dbAgreement.contractAddress
+      );
+      
+      showToast(`Default simulated! Transaction hash: ${formatAddress(txHash)}`, "success");
+      
+      // Refresh data after action
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Simulate default error:', err);
+      showToast(err instanceof Error ? err.message : "Unknown error occurred", "error");
+    } finally {
+      setProcessingAction(null);
+    }
   };
-  
+
+  // If loading, show loading state
   if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <span className="ml-2">Loading loan agreement details...</span>
-      </div>
-    );
+    return <LoadingState />;
   }
-  
-  if (error || (!dbAgreement && !blockchainAgreement)) {
-    return (
-      <Card className="max-w-md mx-auto mt-8">
-        <CardHeader>
-          <CardTitle>Error</CardTitle>
-          <CardDescription>Failed to load loan agreement details</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive" className="mb-4">
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error || "Could not load loan details"}</AlertDescription>
-          </Alert>
-          <Button asChild variant="outline" className="w-full">
-            <a href="/dashboard">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Dashboard
-            </a>
-          </Button>
-        </CardContent>
-      </Card>
-    );
+
+  // If error, show error state
+  if (error || !dbAgreement) {
+    return <ErrorState error={error} />;
   }
   
   // Use blockchain data first, fallback to database data
   const loanDetails = {
     borrower: blockchainAgreement?.borrower || dbAgreement?.borrower?.walletAddress || '',
+    borrowerName: dbAgreement?.borrower?.name || dbAgreement?.borrower?.email || 'Unknown Borrower',
     lender: blockchainAgreement?.lender || dbAgreement?.lender?.walletAddress || '',
+    lenderName: dbAgreement?.lender?.name || dbAgreement?.lender?.email || 'Unknown Lender',
     loanAmount: blockchainAgreement?.loanAmount || dbAgreement?.amount || '0',
     interestRate: blockchainAgreement?.interestRate || dbAgreement?.interestRate || 0,
     duration: blockchainAgreement?.duration || dbAgreement?.duration || 0,
@@ -360,239 +338,142 @@ const LoanAgreementDetail: React.FC = () => {
     status: blockchainAgreement?.status || dbAgreement?.status || 'UNKNOWN',
     startDate: dbAgreement?.startDate ? new Date(dbAgreement.startDate) : new Date(),
     graceMonths: blockchainAgreement?.graceMonths || dbAgreement?.graceMonths || 0,
-    rentalAddress: dbAgreement?.rentalAgreement?.contractAddress || '',
-    remainingBalance: blockchainAgreement 
-      ? (parseFloat(blockchainAgreement.loanAmount) - (blockchainAgreement.lastPaidMonth * parseFloat(blockchainAgreement.monthlyPayment))).toFixed(6)
-      : '0'
+    rentalAddress: rentalContractAddress || 
+                  (dbAgreement?.loanRequest?.rentalAgreement ? 
+                   dbAgreement.loanRequest.rentalAgreement.contractAddress : ''),
+    collateralAmount: blockchainAgreement?.collateralAmount || '0',
+    remainingMonths: blockchainAgreement ? (blockchainAgreement.duration - blockchainAgreement.lastPaidMonth) : 0
+  };
+  
+  // Determine which action buttons to show based on loan status and user role
+  const showFundButton = isUserLender() && 
+                        blockchainAgreement?.status === LoanAgreementStatus.INITIALIZED;
+                        
+  const showRepayButton = isUserBorrower() && 
+                        blockchainAgreement?.status === LoanAgreementStatus.PAID;
+                        
+  const showTestButtons = process.env.NODE_ENV === 'development' || 
+                          window.location.hostname === 'localhost';
+                          
+  const nextPaymentMonth = blockchainAgreement?.lastPaidMonth 
+                          ? blockchainAgreement.lastPaidMonth + 1
+                          : 1;
+  
+  // Determine available tabs based on status and role
+  const getTabs = () => {
+    const tabs = [
+      { id: 'overview', label: 'Overview', isVisible: true },
+      { id: 'schedule', label: 'Payment Schedule', isVisible: true },
+      { 
+        id: 'pay', 
+        label: 'Make Payment', 
+        isVisible: showRepayButton && blockchainAgreement?.status === LoanAgreementStatus.PAID 
+      },
+      { 
+        id: 'fund', 
+        label: 'Fund Loan', 
+        isVisible: showFundButton && blockchainAgreement?.status === LoanAgreementStatus.INITIALIZED
+      },
+      { 
+        id: 'test', 
+        label: 'Test Functions', 
+        isVisible: showTestButtons
+      }
+    ];
+    
+    return tabs.filter(tab => tab.isVisible);
   };
   
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/loan')}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Back to Loans
-        </Button>
-      </div>
-      
-      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            Loan Agreement {getStatusBadge(loanDetails.status)}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Started on {formatDate(loanDetails.startDate)} · ID: {formatAddress(loanDetails.borrower)}
-          </p>
-        </div>
-        <div className="flex flex-col items-end">
-          <span className="text-2xl font-bold">{loanDetails.loanAmount} ETH</span>
-          <span className="text-muted-foreground">at {loanDetails.interestRate}% interest</span>
-        </div>
-      </div>
+      <AgreementHeader 
+        status={loanDetails.status}
+        createDate={loanDetails.startDate}
+        loanAmount={loanDetails.loanAmount}
+        interestRate={loanDetails.interestRate}
+        formatDate={formatDate}
+      />
       
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="schedule">Payment Schedule</TabsTrigger>
-          <TabsTrigger value="pay" disabled={loanDetails.status !== 'ACTIVE' || !isUserBorrower()}>
-            Make Payment
-          </TabsTrigger>
+        <TabsList className="grid" style={{ gridTemplateColumns: `repeat(${getTabs().length}, minmax(0, 1fr))` }}>
+          {getTabs().map(tab => (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.label}
+            </TabsTrigger>
+          ))}
         </TabsList>
         
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CreditCard className="h-5 w-5 mr-2" /> Loan Summary
-              </CardTitle>
-              <CardDescription>Current status and details of this loan agreement</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Repayment Progress</span>
-                  <span className="font-medium">{calculateProgress()}% Complete</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className="bg-primary h-2.5 rounded-full" 
-                    style={{ width: `${calculateProgress()}%` }}
-                  ></div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <User className="h-4 w-4 mr-2 text-muted-foreground" /> Parties
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Borrower:</span>
-                        <span className="font-mono text-sm">
-                          {formatAddress(loanDetails.borrower)}
-                          {isUserBorrower() && ' (You)'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Lender:</span>
-                        <span className="font-mono text-sm">{formatAddress(loanDetails.lender)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <Home className="h-4 w-4 mr-2 text-muted-foreground" /> Collateral Property
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Contract:</span>
-                        <span className="font-mono">{formatAddress(loanDetails.rentalAddress)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="rounded-lg bg-muted p-4">
-                    <h3 className="font-medium flex items-center mb-3">
-                      <Wallet className="h-4 w-4 mr-2 text-muted-foreground" /> Loan Terms
-                    </h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Loan Amount:</span>
-                        <span className="font-medium">{loanDetails.loanAmount} ETH</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Interest Rate:</span>
-                        <span className="font-medium">{loanDetails.interestRate}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Duration:</span>
-                        <span className="font-medium">{loanDetails.duration} months</span>
-                      </div>
-                      <Separator className="my-1" />
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Monthly Payment:</span>
-                        <span className="font-medium">{loanDetails.installmentAmount} ETH</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Repayment Left:</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {loanDetails.status === 'ACTIVE' && isUserBorrower() && (
-                <div className="mt-4">
-                  <Button onClick={() => setActiveTab('pay')}>
-                    Make Payment
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Recent Payments */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Clock className="h-5 w-5 mr-2" /> Recent Payments
-              </CardTitle>
-              <CardDescription>
-                Most recent payment activity for this loan
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {payments
-                  .filter(payment => payment.status !== 'future')
-                  .slice(0, 3)
-                  .map((payment, index) => (
-                    <div key={index} className="flex justify-between items-center py-2">
-                      <div>
-                        <p className="font-medium">{formatDate(payment.date)}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {payment.status === 'paid' ? 'Payment received' : 'Payment due'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-medium">{payment.amount} ETH</p>
-                        <div className="mt-1">{getPaymentStatusBadge(payment.status)}</div>
-                      </div>
-                    </div>
-                  ))}
-                
-                <Button 
-                  variant="outline" 
-                  className="w-full mt-2"
-                  onClick={() => setActiveTab('schedule')}
-                >
-                  View Full Payment Schedule
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <LoanSummaryCard
+            status={loanDetails.status}
+            progress={calculateProgress()}
+            borrower={loanDetails.borrower}
+            borrowerName={loanDetails.borrowerName}
+            lender={loanDetails.lender}
+            lenderName={loanDetails.lenderName}
+            rentalAddress={loanDetails.rentalAddress}
+            collateralAmount={loanDetails.collateralAmount}
+            loanAmount={loanDetails.loanAmount}
+            interestRate={loanDetails.interestRate}
+            duration={loanDetails.duration}
+            graceMonths={loanDetails.graceMonths}
+            installmentAmount={loanDetails.installmentAmount}
+            lastPaidMonth={blockchainAgreement?.lastPaidMonth || 0}
+            remainingMonths={loanDetails.remainingMonths}
+            isUserBorrower={isUserBorrower()}
+            isUserLender={isUserLender()}
+            formatAddress={formatAddress}
+          />
         </TabsContent>
         
         {/* Payment Schedule Tab */}
         <TabsContent value="schedule" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Calendar className="h-5 w-5 mr-2" /> Payment Schedule
-              </CardTitle>
-              <CardDescription>
-                Complete payment schedule for the duration of the loan
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {payments.map((payment, index) => (
-                  <div key={index} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                    <div>
-                      <p className="font-medium">Payment #{index + 1}</p>
-                      <p className="text-sm text-muted-foreground">{formatDate(payment.date)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-medium">{payment.amount} ETH</p>
-                      <div className="mt-1">{getPaymentStatusBadge(payment.status)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <PaymentScheduleTab 
+            payments={payments}
+            formatDate={formatDate}
+            getPaymentStatusBadge={(status) => <PaymentStatusBadge status={status} />}
+          />
         </TabsContent>
         
         {/* Make Payment Tab */}
-        <TabsContent value="pay" className="space-y-6 mt-6">
-          {loanDetails.status !== 'ACTIVE' ? (
-            <Alert>
-              <AlertTitle>This loan is no longer active</AlertTitle>
-              <AlertDescription>
-                You cannot make payments on a loan that has been fully repaid or defaulted.
-              </AlertDescription>
-            </Alert>
-          ) : !isUserBorrower() ? (
-            <Alert>
-              <AlertTitle>Not authorized</AlertTitle>
-              <AlertDescription>
-                Only the borrower can make payments on this loan.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <PayLoan 
-              loanAddress={loanDetails.borrower}
-              onSuccess={() => {
-                // Handle payment success
-              }}
+        {showRepayButton && (
+          <TabsContent value="pay" className="space-y-6 mt-6">
+            <MakePaymentTab
+              contractAddress={dbAgreement.contractAddress}
+              installmentAmount={loanDetails.installmentAmount}
+              nextPaymentMonth={nextPaymentMonth}
+              daysUntilNextPayment={daysUntilNextPayment()}
+              processingAction={processingAction}
+              formatDate={formatDate}
+              handlePayment={handlePayment}
             />
-          )}
-        </TabsContent>
+          </TabsContent>
+        )}
+        
+        {/* Fund Loan Tab */}
+        {showFundButton && (
+          <TabsContent value="fund" className="space-y-6 mt-6">
+            <FundLoanTab
+              contractAddress={dbAgreement.contractAddress}
+              loanAmount={loanDetails.loanAmount}
+              processingAction={processingAction}
+              handleFundLoan={handleFundLoan}
+            />
+          </TabsContent>
+        )}
+        
+        {/* Test Functions Tab */}
+        {showTestButtons && (
+          <TabsContent value="test" className="space-y-6 mt-6">
+            <TestFunctionsTab
+              isUserBorrower={isUserBorrower()}
+              processingAction={processingAction}
+              loanStatus={loanDetails.status}
+              handleSimulateDefault={handleSimulateDefault}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
