@@ -6,6 +6,8 @@ import './App.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { WalletProvider } from './contexts/WalletContext';
 import { ContractProvider } from './contexts/ContractContext';
+import { useWallet } from './contexts/WalletContext';
+import { setWalletContextInstance } from './services/blockchain.service';
 
 // Pages
 import Login from './pages/Login';
@@ -46,53 +48,67 @@ const PrivateRoute: React.FC<{children: React.ReactNode}> = ({ children }) => {
   return <>{children}</>;
 };
 
+// Component to initialize the wallet context instance for BlockchainService
+const WalletContextInitializer: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const walletContext = useWallet();
+  
+  // Set the wallet context instance for BlockchainService
+  React.useEffect(() => {
+    setWalletContextInstance(walletContext);
+  }, [walletContext]);
+  
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <Router>
       <AuthProvider>
         <WalletProvider>
-          <ContractProvider>
-            <Routes>
-              {/* Public routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              
-              {/* Private routes */}
-              <Route path="/" element={
-                <PrivateRoute>
-                  <Layout />
-                </PrivateRoute>
-              }>
-                <Route index element={<Navigate to="/dashboard" replace />} />
+          <WalletContextInitializer>
+            <ContractProvider>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
                 
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="profile" element={<ProfilePage />} />
-                
-                {/* Rental routes */}
-                <Route path="rental">
-                  <Route index element={<RentalList />} />
-                  <Route path="create" element={<RentalCreate />} />
-                  <Route path=":address" element={<RentalDetail />} />
-                  <Route path=":address/loan/request/create" element={<RequestCreate />} />
-                  <Route path=":address/loan/request/:id" element={<RequestDetail />} />
+                {/* Private routes */}
+                <Route path="/" element={
+                  <PrivateRoute>
+                    <Layout />
+                  </PrivateRoute>
+                }>
+                  <Route index element={<Navigate to="/dashboard" replace />} />
+                  
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="profile" element={<ProfilePage />} />
+                  
+                  {/* Rental routes */}
+                  <Route path="rental">
+                    <Route index element={<RentalList />} />
+                    <Route path="create" element={<RentalCreate />} />
+                    <Route path=":address" element={<RentalDetail />} />
+                    <Route path=":address/loan/request/create" element={<RequestCreate />} />
+                    <Route path=":address/loan/request/:id" element={<RequestDetail />} />
+                  </Route>
+                  
+                  {/* Loan routes */}
+                  <Route path="loan" element={<Loan />}>
+                    <Route index element={<Navigate to="/loan/agreements" replace />} />
+                    <Route path="agreements" element={<AgreementList />} />
+                    <Route path="agreement/:address" element={<AgreementDetail />} />
+                    <Route path="requests" element={<RequestList />} />
+                    <Route path="myrequests" element={<MyRequestsPage />} />
+                    <Route path="myoffers" element={<MyOffersPage />} />
+                    <Route path="request/create" element={<RequestCreate />} />
+                  </Route>
                 </Route>
                 
-                {/* Loan routes */}
-                <Route path="loan" element={<Loan />}>
-                  <Route index element={<Navigate to="/loan/agreements" replace />} />
-                  <Route path="agreements" element={<AgreementList />} />
-                  <Route path="agreement/:address" element={<AgreementDetail />} />
-                  <Route path="requests" element={<RequestList />} />
-                  <Route path="myrequests" element={<MyRequestsPage />} />
-                  <Route path="myoffers" element={<MyOffersPage />} />
-                  <Route path="request/create" element={<RequestCreate />} />
-                </Route>
-              </Route>
-              
-              {/* 404 Not found */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </ContractProvider>
+                {/* 404 Not found */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </ContractProvider>
+          </WalletContextInitializer>
         </WalletProvider>
       </AuthProvider>
     </Router>

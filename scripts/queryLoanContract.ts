@@ -27,7 +27,7 @@ async function main() {
     console.log("Connecting to local Hardhat node...");
     const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
     
-    // Get the default signer from the local node
+    // Get the default signer from the local node (for displaying connected account only)
     const signer = await provider.getSigner();
     console.log(`Connected with account: ${await signer.getAddress()}`);
     
@@ -49,8 +49,9 @@ async function main() {
           return;
         }
         
-        // Create the contract instance
-        const loanContract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
+        // Create the contract instance with provider (read-only) instead of signer
+        // This prevents the borrower address from showing as the caller
+        const loanContract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
         
         console.log("\n===== Loan Agreement Details =====\n");
         
@@ -129,8 +130,12 @@ async function main() {
             console.log("Month | Amount (ETH)");
             console.log("-------------------");
             
+            // repaymentSchedule format is [amounts[], monthNumbers[]] as per contract
             for (let i = 0; i < repaymentSchedule[0].length; i++) {
-              console.log(`${Number(repaymentSchedule[0][i])}     | ${ethers.formatEther(repaymentSchedule[1][i])}`);
+              // First array is amounts, second array is month numbers
+              const amount = ethers.formatEther(repaymentSchedule[0][i]);
+              const monthNumber = Number(repaymentSchedule[1][i]);
+              console.log(`${monthNumber}     | ${amount}`);
             }
           } else {
             console.log("No repayment schedule found");

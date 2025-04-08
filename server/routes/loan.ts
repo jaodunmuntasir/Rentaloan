@@ -1374,4 +1374,129 @@ router.get('/myoffers', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// Update loan agreement status
+// @ts-ignore
+router.post('/agreement/:address/update-status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    const { status } = req.body;
+    
+    if (status === undefined) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Status is required' 
+      });
+    }
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the loan agreement
+    const loanAgreement = await LoanAgreement.findOne({
+      where: { contractAddress: address },
+      include: [
+        { model: User, as: 'borrower' },
+        { model: User, as: 'lender' }
+      ]
+    });
+    
+    if (!loanAgreement) {
+      return res.status(404).json({ message: 'Loan agreement not found' });
+    }
+    
+    // Check if user is either the borrower or lender
+    if (loanAgreement.borrowerId !== user.id && loanAgreement.lenderId !== user.id) {
+      return res.status(403).json({ message: 'You are not authorized to update this loan agreement' });
+    }
+    
+    // Update the status
+    await loanAgreement.update({ status });
+    
+    res.json({
+      success: true,
+      message: 'Loan agreement status updated successfully',
+      loanAgreement: {
+        id: loanAgreement.id,
+        contractAddress: loanAgreement.contractAddress,
+        status: loanAgreement.status
+      }
+    });
+  } catch (error) {
+    console.error('Error updating loan agreement status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update loan agreement status',
+      error: (error as Error).message
+    });
+  }
+});
+
+// Record a payment for a loan agreement
+// @ts-ignore
+router.post('/agreement/:address/payment', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { address } = req.params;
+    const { month, amount, txHash } = req.body;
+    
+    if (month === undefined || !amount || !txHash) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Month, amount, and txHash are required' 
+      });
+    }
+    
+    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Find the loan agreement
+    const loanAgreement = await LoanAgreement.findOne({
+      where: { contractAddress: address }
+    });
+    
+    if (!loanAgreement) {
+      return res.status(404).json({ message: 'Loan agreement not found' });
+    }
+    
+    // Check if user is the borrower (only borrowers can make payments)
+    if (loanAgreement.borrowerId !== user.id) {
+      return res.status(403).json({ message: 'Only the borrower can record payments' });
+    }
+    
+    // Create a payment record
+    const payment = await Payment.create({
+      loanAgreementId: loanAgreement.id,
+      payerId: user.id,
+      receiverId: loanAgreement.lenderId,
+      amount,
+      txHash,
+      month,
+      type: PaymentType.LOAN_REPAYMENT,
+      paymentDate: new Date()
+    });
+    
+    res.json({
+      success: true,
+      message: 'Payment recorded successfully',
+      payment: {
+        id: payment.id,
+        amount: payment.amount,
+        txHash: payment.txHash,
+        month: payment.month,
+        paymentDate: payment.paymentDate
+      }
+    });
+  } catch (error) {
+    console.error('Error recording payment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to record payment',
+      error: (error as Error).message
+    });
+  }
+});
+
 export default router; 

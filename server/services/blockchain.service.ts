@@ -465,12 +465,20 @@ export const getRepaymentSchedule = async (contractAddress: string) => {
     const repaymentSchedule = await loanContract.getRepaymentSchedule();
     const schedule = [];
     
-    for (let i = 1; i <= repaymentSchedule.length; i++) {
+    // repaymentSchedule[0] contains payment amounts
+    // repaymentSchedule[1] contains month numbers
+    const amountsArray = repaymentSchedule[0];
+    const monthsArray = repaymentSchedule[1];
+    
+    // Make sure arrays are the same length
+    const count = Math.min(amountsArray.length, monthsArray.length);
+    
+    for (let i = 0; i < count; i++) {
       // @ts-ignore - Contract method exists at runtime
-      const isPaid = await loanContract.repaymentMade(i);
+      const isPaid = await loanContract.repaymentMade(monthsArray[i]);
       schedule.push({
-        month: i,
-        amount: ethers.formatEther(repaymentSchedule[i - 1]),
+        month: Number(monthsArray[i]),
+        amount: ethers.formatEther(amountsArray[i]),
         isPaid
       });
     }

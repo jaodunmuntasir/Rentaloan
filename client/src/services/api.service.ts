@@ -482,5 +482,35 @@ export const LoanApi = {
       console.error('Error making loan repayment:', error);
       throw error;
     }
+  },
+  
+  // Update loan agreement status based on blockchain status
+  updateLoanStatus: async (user: AppUser, contractAddress: string, status: number) => {
+    try {
+      const response = await api.post(
+        `/api/loan/agreement/${contractAddress}/update-status`,
+        { status },
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error updating loan status:', error);
+      throw error;
+    }
+  },
+  
+  // Record a blockchain payment in the database
+  recordPayment: async (user: AppUser, contractAddress: string, month: number, amount: string, txHash: string) => {
+    try {
+      const response = await api.post(
+        `/api/loan/agreement/${contractAddress}/payment`,
+        { month, amount, txHash },
+        getAuthHeader(user)
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error recording payment:', error);
+      throw error;
+    }
   }
 }; 

@@ -433,6 +433,15 @@ const LoanRequestDetail: React.FC = () => {
     if (!currentUser || !loanRequest || !rentalAddress) return;
 
     try {
+      // Check that the current user is the borrower
+      // This is critical because the smart contract uses msg.sender (transaction signer)
+      // as the borrower address on the blockchain. So the transaction MUST be sent
+      // from the borrower's wallet address to ensure proper contract creation.
+      if (!isUserBorrower()) {
+        showToast("Only the borrower can create the loan agreement", "error");
+        return;
+      }
+
       setProcessingAction(`creating-agreement-${offerId}`);
       showToast("Creating loan agreement on blockchain...", "info");
 
@@ -444,6 +453,7 @@ const LoanRequestDetail: React.FC = () => {
 
       console.log("Creating loan agreement with offer:", {
         offerId,
+        borrower: loanRequest.requester?.walletAddress,
         lender: offerToUse.lender?.walletAddress,
         rentalAddress,
         amount: offerToUse.amount || loanRequest.amount,

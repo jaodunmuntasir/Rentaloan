@@ -5,6 +5,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { BlockchainService, LoanAgreementStatus } from '../../services/blockchain.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { LoanApi } from '../../services/api.service';
+import { User } from '../../types/user.types';
 import { 
   AgreementHeader,
   LoanSummaryCard,
@@ -23,6 +25,7 @@ interface Payment {
   date: Date;
   amount: string;
   status: 'paid' | 'due' | 'future';
+  txHash?: string | null;
 }
 
 interface LoanAgreementData {
@@ -59,15 +62,9 @@ interface PaymentStatus {
   isPaid: boolean;
 }
 
-// Function to fetch loan agreement data from the API
-const fetchLoanAgreementData = async (id: string): Promise<LoanAgreementData> => {
-  const response = await axios.get(`/api/loan/agreement/${id}`);
-  return response.data;
-};
-
 // Main component
 const LoanAgreementDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { address } = useParams<{ address: string }>();
   const { showToast } = useToast();
   const { currentUser } = useAuth();
   
@@ -76,75 +73,181 @@ const LoanAgreementDetail: React.FC = () => {
   const [blockchainAgreement, setBlockchainAgreement] = useState<any>(null);
   const [rentalContractAddress, setRentalContractAddress] = useState<string>('');
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [contractPaymentStatus, setContractPaymentStatus] = useState<PaymentStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [lastKnownStatus, setLastKnownStatus] = useState<LoanAgreementStatus | null>(null);
+  
+  // Update server with new contract status when it changes
+  const updateServerStatus = async (newStatus: LoanAgreementStatus) => {
+    if (!currentUser || !address) return;
+    
+    try {
+      console.log('Updating server with new status:', newStatus);
+      // Convert Firebase user to User type
+      const userForApi: User = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
+      await LoanApi.updateLoanStatus(userForApi, address, newStatus);
+      console.log('Server status updated successfully');
+    } catch (err) {
+      console.error('Error updating server status:', err);
+      showToast('Failed to update server status, but contract status is updated', 'warning');
+    }
+  };
+  
+  // Fetch blockchain data periodically
+  const fetchBlockchainData = async () => {
+    if (!address || !currentUser) return null;
+    
+    // Use a mounted flag to prevent state updates after unmount
+    let isMounted = true;
+    
+    try {
+      // Fetch blockchain data
+      const blockchainData = await BlockchainService.getLoanAgreementDetails(address);
+      
+      // Check if component is still mounted before updating state
+      if (!isMounted) return null;
+      
+      setBlockchainAgreement(blockchainData);
+      
+      // Check if status has changed and update server if needed
+      if (lastKnownStatus !== null && lastKnownStatus !== blockchainData.status) {
+        await updateServerStatus(blockchainData.status);
+      }
+      
+      if (!isMounted) return null;
+      setLastKnownStatus(blockchainData.status);
+      
+      // Get rental contract address
+      const rentalAddress = await BlockchainService.getRentalContractAddress(address);
+      
+      if (!isMounted) return null;
+      setRentalContractAddress(rentalAddress);
+      
+      // Get payment status
+      const paymentStatusData = await BlockchainService.getPaymentStatus(address);
+      
+      if (!isMounted) return null;
+      
+      // Transform into our format
+      const statusArray = paymentStatusData.monthNumbers.map((month: number, index: number) => ({
+        monthNumber: month,
+        isPaid: paymentStatusData.isPaid[index]
+      }));
+      
+      setContractPaymentStatus(statusArray);
+      
+      // Generate payment schedule from blockchain data
+      const schedule: Payment[] = [];
+      const startDate = dbAgreement?.startDate ? new Date(dbAgreement.startDate) : new Date();
+      
+      for (let i = 1; i <= blockchainData.duration; i++) {
+        const paymentDate = new Date(startDate);
+        paymentDate.setMonth(paymentDate.getMonth() + i);
+        
+        const paymentInfo = statusArray.find(s => s.monthNumber === i);
+        const isPaid = paymentInfo ? paymentInfo.isPaid : false;
+        const isCurrentOrFuture = i > blockchainData.lastPaidMonth;
+        
+        schedule.push({
+          monthNumber: i,
+          date: paymentDate,
+          amount: blockchainData.monthlyPayment,
+          status: isPaid ? 'paid' : isCurrentOrFuture ? 'future' : 'due',
+          txHash: null // We don't store txHash in the blockchain, it would come from API
+        });
+      }
+      
+      if (!isMounted) return null;
+      setPayments(schedule);
+      
+      return blockchainData;
+      
+    } catch (blockchainError) {
+      console.error('Error fetching blockchain data:', blockchainError);
+      return null;
+    } finally {
+      // Clean up function to set mounted flag to false on unmount
+      return () => {
+        isMounted = false;
+      };
+    }
+  };
   
   // Fetch data on component mount
   useEffect(() => {
-    const fetchData = async () => {
-      if (!id) {
-        setError('Loan agreement ID is missing');
+    const fetchInitialData = async () => {
+      if (!address) {
+        setError('Loan agreement address is missing');
+        setLoading(false);
+        return;
+      }
+      
+      if (!currentUser) {
+        setError('User not authenticated');
         setLoading(false);
         return;
       }
       
       try {
         setLoading(true);
-        // Fetch agreement data from database
-        const dbData = await fetchLoanAgreementData(id);
-        setDbAgreement(dbData);
         
-        // Ensure we have a valid contract address
-        if (!dbData.contractAddress) {
-          throw new Error('Contract address not found for this loan agreement');
-        }
+        // First try to get blockchain data directly
+        const blockchainData = await fetchBlockchainData();
         
+        // Convert Firebase user to User type
+        const userForApi: User = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+        
+        // Fetch agreement data from database for user info using API service
         try {
-          // Fetch blockchain data
-          const blockchainData = await BlockchainService.getLoanAgreementDetails(dbData.contractAddress);
-          setBlockchainAgreement(blockchainData);
+          // Use axios directly with authorization header to ensure proper authentication
+          const response = await axios.get(
+            `http://localhost:5000/api/loan/agreement/${address}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${await currentUser.getIdToken()}`
+              }
+            }
+          );
           
-          // Get rental contract address
-          const rentalAddress = await BlockchainService.getRentalContractAddress(dbData.contractAddress);
-          setRentalContractAddress(rentalAddress);
+          const dbData = response.data.loanAgreement;
+          const apiPayments = response.data.payments || [];
           
-          // Get payment status
-          const paymentStatusData = await BlockchainService.getPaymentStatus(dbData.contractAddress);
+          setDbAgreement(dbData);
           
-          // Transform into our format
-          const statusArray = paymentStatusData.monthNumbers.map((month: number, index: number) => ({
-            monthNumber: month,
-            isPaid: paymentStatusData.isPaid[index]
-          }));
-          
-          // Generate payment schedule
-          const schedule: Payment[] = [];
-          const startDate = new Date(dbData.startDate);
-          
-          for (let i = 1; i <= blockchainData.duration; i++) {
-            const paymentDate = new Date(startDate);
-            paymentDate.setMonth(paymentDate.getMonth() + i);
+          // Update payments with transaction hash info from API
+          if (payments.length > 0 && apiPayments.length > 0) {
+            const updatedPayments = [...payments];
             
-            const isPaid = statusArray.find(s => s.monthNumber === i)?.isPaid || false;
-            const isCurrentOrFuture = i > blockchainData.lastPaidMonth;
-            
-            schedule.push({
-              monthNumber: i,
-              date: paymentDate,
-              amount: blockchainData.monthlyPayment,
-              status: isPaid ? 'paid' : isCurrentOrFuture ? 'future' : 'due'
+            apiPayments.forEach((apiPayment: any) => {
+              const paymentIndex = updatedPayments.findIndex(p => p.monthNumber === apiPayment.month);
+              if (paymentIndex !== -1) {
+                updatedPayments[paymentIndex].txHash = apiPayment.txHash;
+              }
             });
+            
+            setPayments(updatedPayments);
           }
-          
-          setPayments(schedule);
-        } catch (blockchainError) {
-          console.error('Error fetching blockchain data:', blockchainError);
-          showToast('Could not fetch real-time data from blockchain', 'warning');
-        } finally {
-          setLoading(false);
+        } catch (apiError) {
+          console.error('Error fetching loan agreement from API:', apiError);
+          showToast('Could not fetch agreement details from server', 'warning');
         }
+        
+        setLoading(false);
       } catch (err) {
         console.error('Error fetching loan agreement details:', err);
         setError('Failed to load loan agreement details. Please try again.');
@@ -152,8 +255,17 @@ const LoanAgreementDetail: React.FC = () => {
       }
     };
     
-    fetchData();
-  }, [id, showToast, currentUser]);
+    fetchInitialData();
+    
+    // Poll for blockchain updates every 15 seconds
+    const intervalId = setInterval(() => {
+      if (currentUser) {  // Only fetch if user is logged in
+        fetchBlockchainData().catch(console.error);
+      }
+    }, 15000);
+    
+    return () => clearInterval(intervalId);
+  }, [address, currentUser]); // Remove showToast from dependencies to prevent potential rerenders
   
   // Utility functions
   // Calculate repayment progress based on last paid month and total duration
@@ -230,25 +342,39 @@ const LoanAgreementDetail: React.FC = () => {
   // Action handlers
   // Handle payment submission
   const handlePayment = async (month: number, amount: string) => {
-    if (!dbAgreement?.contractAddress) {
-      showToast("Contract address not found", "error");
+    if (!address || !currentUser) {
+      showToast("Contract address not found or user not authenticated", "error");
       return;
     }
     
     try {
       setProcessingAction('payment');
       const txHash = await BlockchainService.makeRepayment(
-        dbAgreement.contractAddress,
+        address,
         month,
         amount
       );
       
       showToast(`Payment successful! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Refresh data after successful payment
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Update blockchain data instead of reloading
+      await fetchBlockchainData();
+      
+      // Also record the payment in the database
+      try {
+        // Convert Firebase user to User type
+        const userForApi: User = {
+        id: currentUser.uid,
+        email: currentUser.email || '',
+        name: currentUser.displayName || '',
+        walletAddress: null,
+        token: await currentUser.getIdToken()
+      };
+        await LoanApi.recordPayment(userForApi, address, month, amount, txHash);
+      } catch (dbErr) {
+        console.error('Error recording payment in database:', dbErr);
+        // Continue even if this fails - blockchain is source of truth
+      }
       
     } catch (err) {
       console.error('Payment error:', err);
@@ -260,7 +386,7 @@ const LoanAgreementDetail: React.FC = () => {
 
   // Handle funding the loan
   const handleFundLoan = async () => {
-    if (!dbAgreement?.contractAddress || !blockchainAgreement) {
+    if (!address || !blockchainAgreement) {
       showToast("Contract details not found", "error");
       return;
     }
@@ -268,16 +394,14 @@ const LoanAgreementDetail: React.FC = () => {
     try {
       setProcessingAction('fundLoan');
       const txHash = await BlockchainService.fundLoan(
-        dbAgreement.contractAddress,
+        address,
         blockchainAgreement.loanAmount
       );
       
       showToast(`Loan funded successfully! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Refresh data after successful funding
-      setTimeout(() => {
-      window.location.reload();
-      }, 2000);
+      // Update blockchain data instead of reloading
+      await fetchBlockchainData();
       
     } catch (err) {
       console.error('Funding error:', err);
@@ -289,7 +413,7 @@ const LoanAgreementDetail: React.FC = () => {
   
   // Handle simulating a default (for testing)
   const handleSimulateDefault = async () => {
-    if (!dbAgreement?.contractAddress) {
+    if (!address) {
       showToast("Contract address not found", "error");
       return;
     }
@@ -297,15 +421,13 @@ const LoanAgreementDetail: React.FC = () => {
     try {
       setProcessingAction('simulateDefault');
       const txHash = await BlockchainService.simulateDefault(
-        dbAgreement.contractAddress
+        address
       );
       
       showToast(`Default simulated! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Refresh data after action
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      // Update blockchain data instead of reloading
+      await fetchBlockchainData();
       
     } catch (err) {
       console.error('Simulate default error:', err);

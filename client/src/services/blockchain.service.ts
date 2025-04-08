@@ -4,6 +4,7 @@ import LoanAgreementFactoryABI from '../contracts/ABI/LoanAgreementFactory.json'
 import LoanAgreementABI from '../contracts/ABI/LoanAgreement.json';
 import { User } from '../types/user.types';
 import contractAddresses from '../config/contractAddresses.json';
+import { useWallet } from '../contexts/WalletContext';
 
 interface RentalAgreementDetails {
   landlord: string;
@@ -52,27 +53,40 @@ export interface LoanAgreementDetails {
   interestRate: number;
 }
 
+// Get the WalletContext instance (for use in non-component functions)
+let walletContextInstance: any = null;
+
+export function setWalletContextInstance(instance: any) {
+  walletContextInstance = instance;
+}
+
 export class BlockchainService {
-  private static provider: ethers.Provider;
   private static factoryAddress: string = contractAddresses.loanAgreementFactory;
 
-  private static initialize() {
-    if (!this.provider) {
-      // Use window.ethereum if available (MetaMask or other wallet)
-      const ethereum = (window as any).ethereum;
-      if (ethereum) {
-        this.provider = new ethers.BrowserProvider(ethereum);
-      } else {
-        // Fallback to HTTP provider (read-only operations)
-        this.provider = new ethers.JsonRpcProvider('http://localhost:8545');
-      }
+  /**
+   * Get the provider and signer from WalletContext
+   * @returns The provider and signer from WalletContext
+   */
+  private static getWalletConnection(): { provider: ethers.Provider | null, signer: ethers.Signer | null } {
+    if (!walletContextInstance) {
+      console.error('WalletContext not initialized. Operations requiring a signer will fail.');
+      
+      // Return a read-only provider for non-transaction operations
+      const fallbackProvider = new ethers.JsonRpcProvider('http://localhost:8545');
+      return { provider: fallbackProvider, signer: null };
     }
-    return this.provider;
+    
+    return {
+      provider: walletContextInstance.provider,
+      signer: walletContextInstance.signer
+    };
   }
 
   static async getRentalAgreementDetails(contractAddress: string): Promise<RentalAgreementDetails> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, RentalAgreementABI, provider);
 
       // Get basic details from the contract
@@ -100,7 +114,9 @@ export class BlockchainService {
 
   static async getAvailableCollateral(contractAddress: string): Promise<CollateralInfo> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, RentalAgreementABI, provider);
 
       // Get security deposit amount from the contract
@@ -121,7 +137,9 @@ export class BlockchainService {
 
   static async getDueAmount(contractAddress: string): Promise<DueAmountInfo> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, RentalAgreementABI, provider);
 
       // Get the amount due for the next payment
@@ -147,6 +165,9 @@ export class BlockchainService {
    * @param duration The loan duration in months
    * @param graceMonths The grace period in months
    * @returns The transaction receipt with contract address
+   * 
+   * IMPORTANT: This transaction MUST be sent from the borrower's wallet
+   * as the smart contract uses msg.sender as the borrower address.
    */
   static async createLoanAgreement(
     lenderAddress: string,
@@ -167,11 +188,15 @@ export class BlockchainService {
         graceMonths
       });
       
-      // Initialize provider and get signer
-      const provider = this.initialize();
-      // Cast the provider to BrowserProvider which has getSigner
-      const browserProvider = provider as ethers.BrowserProvider;
-      const signer = await browserProvider.getSigner();
+      // Get the signer from WalletContext
+      const { signer } = this.getWalletConnection();
+      if (!signer) {
+        throw new Error('Wallet not connected. Please connect your wallet to create a loan agreement.');
+      }
+      
+      // Get the signer's address (will be the borrower in the contract)
+      const signerAddress = await signer.getAddress();
+      console.log('Signer address (will be set as borrower):', signerAddress);
       
       // Check if the factory address is set
       if (!this.factoryAddress) {
@@ -203,6 +228,8 @@ export class BlockchainService {
       
       // Create a loan agreement
       console.log('Submitting transaction to create loan agreement...');
+      console.log('IMPORTANT: The transaction signer (current wallet address) will be set as the borrower!');
+      
       const tx = await factory.createLoanAgreement(
         lenderAddress,
         rentalContractAddress,
@@ -260,7 +287,9 @@ export class BlockchainService {
    */
   static async getLoanAgreementDetails(contractAddress: string): Promise<LoanAgreementDetails> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
       
       // Get all the necessary details from the contract
@@ -314,10 +343,9 @@ export class BlockchainService {
    */
   static async fundLoan(contractAddress: string, loanAmount: string): Promise<string> {
     try {
-      const provider = this.initialize();
-      // Cast the provider to BrowserProvider which has getSigner
-      const browserProvider = provider as ethers.BrowserProvider;
-      const signer = await browserProvider.getSigner();
+      const { signer } = this.getWalletConnection();
+      if (!signer) throw new Error('Wallet not connected');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
       
       // Convert loan amount to wei
@@ -337,29 +365,28 @@ export class BlockchainService {
   /**
    * Make a repayment for a loan
    * @param contractAddress The loan agreement contract address
-   * @param month The month to pay for
-   * @param amount The payment amount
+   * @param monthNumber The month number to pay for
+   * @param amount The amount to pay
    * @returns The transaction receipt
    */
-  static async makeRepayment(contractAddress: string, month: number, amount: string): Promise<string> {
+  static async makeRepayment(contractAddress: string, monthNumber: number, amount: string): Promise<string> {
     try {
-      const provider = this.initialize();
-      // Cast the provider to BrowserProvider which has getSigner
-      const browserProvider = provider as ethers.BrowserProvider;
-      const signer = await browserProvider.getSigner();
+      const { signer } = this.getWalletConnection();
+      if (!signer) throw new Error('Wallet not connected');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
       
       // Convert amount to wei
       const amountWei = ethers.parseEther(amount.toString());
       
       // Make the repayment
-      const tx = await contract.makeRepayment(month, { value: amountWei });
+      const tx = await contract.makeRepayment(monthNumber, { value: amountWei });
       const receipt = await tx.wait();
       
       return receipt.hash;
     } catch (error) {
-      console.error('Error making loan repayment:', error);
-      throw new Error('Failed to make loan repayment on blockchain');
+      console.error('Error making repayment:', error);
+      throw new Error('Failed to make repayment on blockchain');
     }
   }
 
@@ -370,10 +397,10 @@ export class BlockchainService {
    */
   static async simulateDefault(contractAddress: string): Promise<string> {
     try {
-      const provider = this.initialize();
-      const browserProvider = provider as ethers.BrowserProvider;
-      const signer = await browserProvider.getSigner();
-      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
       
       // Call simulateDefault function
       const tx = await contract.simulateDefault();
@@ -393,7 +420,9 @@ export class BlockchainService {
    */
   static async getPaymentStatus(contractAddress: string): Promise<{monthNumbers: number[], isPaid: boolean[]}> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
       
       const paymentStatus = await contract.getPaymentStatus();
@@ -416,7 +445,9 @@ export class BlockchainService {
    */
   static async getRepaymentInfo(contractAddress: string, month: number): Promise<{amount: string, isPaid: boolean}> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
       
       const info = await contract.getRepaymentInfo(month);
@@ -438,7 +469,9 @@ export class BlockchainService {
    */
   static async getRentalContractAddress(contractAddress: string): Promise<string> {
     try {
-      const provider = this.initialize();
+      const { provider } = this.getWalletConnection();
+      if (!provider) throw new Error('Provider not available');
+      
       const contract = new ethers.Contract(contractAddress, LoanAgreementABI, provider);
       
       return await contract.rentalContract();
