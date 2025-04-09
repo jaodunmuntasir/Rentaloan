@@ -8,16 +8,14 @@ import { Payment } from './payment.model';
 /**
  * Status values match the blockchain contract Status enum:
  * Contract enum: INITIALIZED, READY, ACTIVE, PAID, COMPLETED, DEFAULTED
- * Database enum: CREATED, PENDING, ACTIVE, FUNDED, COMPLETED, FAILED, CLOSED
  */
 export enum LoanAgreementStatus {
-  CREATED = 'CREATED',    // Maps to INITIALIZED in blockchain
-  PENDING = 'PENDING',    // Maps to READY in blockchain
-  ACTIVE = 'ACTIVE',      // Maps to ACTIVE in blockchain
-  FUNDED = 'FUNDED',      // Maps to PAID in blockchain
+  INITIALIZED = 'INITIALIZED',
+  READY = 'READY',
+  ACTIVE = 'ACTIVE',
+  PAID = 'PAID',
   COMPLETED = 'COMPLETED',
-  FAILED = 'FAILED',      // Maps to DEFAULTED in blockchain
-  CLOSED = 'CLOSED'       // General closed state
+  DEFAULTED = 'DEFAULTED'
 }
 
 @Table({
@@ -102,7 +100,7 @@ export class LoanAgreement extends Model {
   @Column({
     type: DataType.ENUM(...Object.values(LoanAgreementStatus)),
     allowNull: false,
-    defaultValue: LoanAgreementStatus.CREATED
+    defaultValue: LoanAgreementStatus.INITIALIZED
   })
   status!: LoanAgreementStatus;
 

@@ -55,7 +55,7 @@ export class LoanOffer extends Model {
   @Column({
     type: DataType.INTEGER,
     allowNull: false,
-    defaultValue: 0 // Always set to 0 for loans
+    defaultValue: 1 // Always set to 1 for loans
   })
   graceMonths!: number;
 

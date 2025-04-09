@@ -7,7 +7,6 @@ import { LoanRequest, LoanRequestStatus } from '../../models/loan-request.model'
 import { LoanOffer, LoanOfferStatus } from '../../models/loan-offer.model';
 import { LoanAgreement, LoanAgreementStatus } from '../../models/loan-agreement.model';
 import { Payment, PaymentType } from '../../models/payment.model';
-import * as BlockchainService from '../../services/blockchain.service';
 import { convertBigIntToString } from './utils';
 
 const router = express.Router();
@@ -105,9 +104,6 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
 
     // Check contract details from the blockchain
     try {
-      const loanContractDetails = await BlockchainService.getLoanAgreementDetails(contractAddress);
-      console.log('Loan contract details from blockchain:', convertBigIntToString(loanContractDetails));
-
       // Create loan agreement record
       const loanAgreement = await LoanAgreement.create({
         contractAddress,
@@ -118,7 +114,7 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
         amount: loanOffer.amount || loanOffer.loanRequest.amount, // Use offer amount if available, otherwise request amount
         interestRate: loanOffer.interestRate,
         duration: loanOffer.duration,
-        status: LoanAgreementStatus.CREATED,
+        status: LoanAgreementStatus.INITIALIZED,
         startDate: new Date()
       });
 
@@ -288,31 +284,9 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
       status: loanAgreement.status
     });
 
-    // Get blockchain data
-    let blockchainDetails;
-    try {
-      blockchainDetails = await BlockchainService.getLoanAgreementDetails(address);
-      console.log('Blockchain details retrieved successfully');
-    } catch (error) {
-      console.error('Error retrieving blockchain details:', error);
-      blockchainDetails = null;
-    }
-
-    // Get repayment schedule from blockchain
-    let repaymentSchedule;
-    try {
-      repaymentSchedule = await BlockchainService.getRepaymentSchedule(address);
-      console.log('Repayment schedule retrieved successfully');
-    } catch (error) {
-      console.error('Error retrieving repayment schedule:', error);
-      repaymentSchedule = null;
-    }
-    
     res.json({ 
       success: true,
-      loanAgreement,
-      blockchainDetails: blockchainDetails ? convertBigIntToString(blockchainDetails) : null,
-      repaymentSchedule: repaymentSchedule ? convertBigIntToString(repaymentSchedule) : null
+      loanAgreement
     });
   } catch (error) {
     console.error('Error retrieving loan agreement details:', error);
@@ -380,11 +354,11 @@ router.post('/:address/initialize', authenticate, async (req: Request, res: Resp
       });
     }
     
-    // Check if loan is in CREATED status
-    if (loanAgreement.status !== LoanAgreementStatus.CREATED) {
+    // Check if loan is in INITIALIZED status
+    if (loanAgreement.status !== LoanAgreementStatus.INITIALIZED) {
       return res.status(400).json({ 
         success: false, 
-        message: "Loan agreement is not in CREATED status" 
+        message: "Loan agreement is not initialized" 
       });
     }
     
