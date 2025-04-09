@@ -508,5 +508,183 @@ export const LoanApi = {
       console.error('Error recording payment:', error);
       throw error;
     }
+  },
+
+  // Get payments history for a loan agreement
+  getPaymentsHistory: async (user: AppUser, contractAddress: string) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/${contractAddress}/payments`,
+        'GET', 
+        user
+      );
+      return {
+        payments: response?.payments || [],
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error fetching payment history:', error);
+      return {
+        payments: [],
+        success: false,
+        error: error.message || 'Failed to fetch payment history',
+      };
+    }
+  },
+
+  // Get loan agreement by contract address
+  getLoanAgreementByAddress: async (user: AppUser, contractAddress: string) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/address/${contractAddress}`,
+        'GET',
+        user
+      );
+      return {
+        loanAgreement: response?.loanAgreement || null,
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error fetching loan agreement by address:', error);
+      return {
+        loanAgreement: null,
+        success: false,
+        error: error.message || 'Failed to fetch loan agreement',
+      };
+    }
+  },
+
+  // Record a blockchain transaction for any operation
+  recordTransaction: async (
+    user: AppUser, 
+    contractAddress: string, 
+    txHash: string, 
+    type: 'fund' | 'repay' | 'withdraw' | 'complete' | 'default', 
+    data: any = {}
+  ) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/${contractAddress}/transaction`,
+        'POST',
+        user,
+        {
+          transactionHash: txHash,
+          type,
+          ...data
+        }
+      );
+      return {
+        transaction: response?.transaction || null,
+        success: true,
+      };
+    } catch (error: any) {
+      console.error('Error recording transaction:', error);
+      return {
+        transaction: null,
+        success: false,
+        error: error.message || 'Failed to record transaction',
+      };
+    }
+  },
+
+  // Update loan status with retry logic
+  updateLoanStatusWithRetry: async (user: AppUser, contractAddress: string, status: number, maxRetries = 3) => {
+    let retries = 0;
+    let lastError = null;
+    
+    while (retries < maxRetries) {
+      try {
+        const response = await api.post(
+          `/api/loan/agreement/${contractAddress}/update-status`,
+          { status },
+          getAuthHeader(user)
+        );
+        return {
+          success: true,
+          statusUpdated: true,
+          data: response.data
+        };
+      } catch (error: any) {
+        console.error(`Error updating loan status (attempt ${retries + 1}):`, error);
+        lastError = error;
+        retries++;
+        
+        // Wait before retrying (exponential backoff)
+        if (retries < maxRetries) {
+          const waitTime = Math.pow(2, retries) * 1000; // 2^retries seconds
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+      }
+    }
+    
+    return {
+      success: false,
+      statusUpdated: false,
+      error: lastError?.message || 'Failed to update loan status after multiple attempts'
+    };
+  },
+
+  // Fund a loan (record the blockchain transaction)
+  fundLoan: async (user: AppUser, contractAddress: string, amount: string, txHash: string) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/${contractAddress}/fund`,
+        'POST',
+        user,
+        { amount, transactionHash: txHash }
+      );
+      return {
+        success: true,
+        data: response
+      };
+    } catch (error: any) {
+      console.error('Error recording loan funding:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to record loan funding'
+      };
+    }
+  },
+
+  // Get loan status details
+  getLoanStatusDetails: async (user: AppUser, contractAddress: string) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/${contractAddress}/status`,
+        'GET',
+        user
+      );
+      return {
+        success: true,
+        status: response.status
+      };
+    } catch (error: any) {
+      console.error('Error fetching loan status details:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch loan status details'
+      };
+    }
+  },
+
+  // Get loan repayment schedule
+  getLoanRepaymentSchedule: async (user: AppUser, contractAddress: string) => {
+    try {
+      const response = await apiCall(
+        `/api/loan/agreement/${contractAddress}/schedule`,
+        'GET',
+        user
+      );
+      return {
+        success: true,
+        schedule: response.schedule
+      };
+    } catch (error: any) {
+      console.error('Error fetching loan repayment schedule:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch loan repayment schedule'
+      };
+    }
   }
 }; 

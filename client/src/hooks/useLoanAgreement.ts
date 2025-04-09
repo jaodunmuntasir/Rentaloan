@@ -8,6 +8,7 @@ import {
   LoanDetails, 
   LoanStatus,
 } from '../services/loan-agreement.service';
+import { LoanSyncService, SyncResult } from '../services/loan-sync.service';
 
 export interface LoanSummary {
   totalLoanAmount: number;
@@ -23,6 +24,8 @@ interface TransactionState {
   hash?: string;
   error?: string;
   isSuccess?: boolean;
+  syncedWithBackend?: boolean;
+  backendError?: string;
 }
 
 export function useLoanAgreement(contractAddress?: string) {
@@ -51,6 +54,19 @@ export function useLoanAgreement(contractAddress?: string) {
   // Event listener cleanup reference
   const [eventListenerContract, setEventListenerContract] = useState<ethers.Contract | null>(null);
   
+  // Helper to create App User object for API calls
+  const getAppUser = useCallback(async () => {
+    if (!currentUser) return null;
+    
+    return {
+      id: currentUser.uid,
+      email: currentUser.email || '',
+      name: currentUser.displayName || '',
+      walletAddress: walletAddress || null,
+      token: await currentUser.getIdToken()
+    };
+  }, [currentUser, walletAddress]);
+  
   // Load loan details
   const loadDetails = useCallback(async () => {
     if (!contractAddress || !signer || !isConnected) {
@@ -74,13 +90,27 @@ export function useLoanAgreement(contractAddress?: string) {
         setUserIsBorrower(isBorrower);
         setUserIsLender(isLender);
       }
+      
+      // Synchronize status with backend
+      const appUser = await getAppUser();
+      if (appUser && signer) {
+        LoanSyncService.syncLoanStatus(appUser, contractAddress, signer)
+          .then(result => {
+            if (!result.success) {
+              console.warn('Failed to sync loan status with backend:', result.error);
+            }
+          })
+          .catch(err => {
+            console.error('Error syncing loan status:', err);
+          });
+      }
     } catch (err: any) {
       console.error("Error loading loan details:", err);
       setError(err.message || "Error loading loan details");
     } finally {
       setLoading(false);
     }
-  }, [contractAddress, signer, isConnected, walletAddress]);
+  }, [contractAddress, signer, isConnected, walletAddress, getAppUser]);
   
   // Refresh details when refresh trigger changes
   useEffect(() => {
@@ -113,8 +143,24 @@ export function useLoanAgreement(contractAddress?: string) {
     const contract = LoanAgreementService.listenForEvents(
       contractAddress,
       provider,
-      (eventName, data) => {
+      async (eventName, data) => {
         console.log(`Event received: ${eventName}`, data);
+        
+        // Handle status changes with backend sync
+        if (eventName === 'StatusChanged' && data.newStatus !== undefined) {
+          const appUser = await getAppUser();
+          if (appUser && data.transactionHash) {
+            LoanSyncService.recordStatusChange(
+              appUser,
+              contractAddress,
+              Number(data.newStatus),
+              data.transactionHash
+            ).catch(err => {
+              console.error('Error recording status change:', err);
+            });
+          }
+        }
+        
         // Refresh data when events occur
         setRefreshTrigger(prev => prev + 1);
       }
@@ -126,10 +172,10 @@ export function useLoanAgreement(contractAddress?: string) {
     return () => {
       contract.removeAllListeners();
     };
-  }, [contractAddress, signer, isConnected, eventListenerContract]);
+  }, [contractAddress, signer, isConnected, eventListenerContract, getAppUser]);
   
   // Fund loan (for lender)
-  const fundLoan = useCallback(async () => {
+  const fundLoan = useCallback(async (): Promise<SyncResult | null> => {
     if (!contractAddress || !signer || !isConnected || !details) {
       setError("Contract not initialized or wallet not connected");
       return null;
@@ -145,43 +191,33 @@ export function useLoanAgreement(contractAddress?: string) {
         isProcessing: true
       });
       
-      // Call service to fund loan
-      const result = await LoanAgreementService.fundLoan(
+      // Get app user for API
+      const appUser = await getAppUser();
+      if (!appUser) {
+        throw new Error("User not authenticated");
+      }
+      
+      // Use LoanSyncService to fund loan with synchronized backend update
+      const result = await LoanSyncService.fundLoan(
+        appUser,
         contractAddress,
         details.loanAmount,
         signer
       );
       
-      if (!result.success) {
-        throw new Error(result.error || "Transaction failed");
-      }
-      
       setFundingState({
         isProcessing: false,
         hash: result.transactionHash,
-        isSuccess: true
+        isSuccess: result.success,
+        syncedWithBackend: result.syncedWithBackend,
+        backendError: result.backendError,
+        error: result.success ? undefined : result.error
       });
       
-      // Update backend
-      if (currentUser) {
-        // Convert Firebase User to App User for API
-        const appUser = {
-          id: currentUser.uid,
-          email: currentUser.email || '',
-          name: currentUser.displayName || '',
-          walletAddress: null,
-          token: await currentUser.getIdToken()
-        };
-
-        await LoanApi.initializeLoan(
-          appUser,
-          contractAddress,
-          result.transactionHash!
-        );
+      if (result.success) {
+        // Refresh details
+        setRefreshTrigger(prev => prev + 1);
       }
-      
-      // Refresh details
-      setRefreshTrigger(prev => prev + 1);
       
       return result;
     } catch (err: any) {
@@ -189,14 +225,15 @@ export function useLoanAgreement(contractAddress?: string) {
       setFundingState({
         isProcessing: false,
         error: err.message || "Error funding loan",
-        isSuccess: false
+        isSuccess: false,
+        syncedWithBackend: false
       });
       return null;
     }
-  }, [contractAddress, signer, isConnected, details, userIsLender, currentUser]);
+  }, [contractAddress, signer, isConnected, details, userIsLender, getAppUser]);
   
   // Make repayment (for borrower)
-  const makeRepayment = useCallback(async (month: number) => {
+  const makeRepayment = useCallback(async (month: number): Promise<SyncResult | null> => {
     if (!contractAddress || !signer || !isConnected || !details) {
       setError("Contract not initialized or wallet not connected");
       return null;
@@ -218,50 +255,34 @@ export function useLoanAgreement(contractAddress?: string) {
         throw new Error(`Repayment for month ${month} not found`);
       }
       
-      // Call service to make repayment
-      const result = await LoanAgreementService.makeRepayment(
+      // Get app user for API
+      const appUser = await getAppUser();
+      if (!appUser) {
+        throw new Error("User not authenticated");
+      }
+      
+      // Use LoanSyncService to make repayment with synchronized backend update
+      const result = await LoanSyncService.makeRepayment(
+        appUser,
         contractAddress,
         month,
         repayment.amount,
         signer
       );
       
-      if (!result.success) {
-        throw new Error(result.error || "Transaction failed");
-      }
-      
       setRepaymentState({
         isProcessing: false,
         hash: result.transactionHash,
-        isSuccess: true
+        isSuccess: result.success,
+        syncedWithBackend: result.syncedWithBackend,
+        backendError: result.backendError,
+        error: result.success ? undefined : result.error
       });
       
-      // Check if this is the final payment
-      const isComplete = month === details.duration;
-      
-      // Update backend
-      if (currentUser) {
-        // Convert Firebase User to App User for API
-        const appUser = {
-          id: currentUser.uid,
-          email: currentUser.email || '',
-          name: currentUser.displayName || '',
-          walletAddress: null,
-          token: await currentUser.getIdToken()
-        };
-
-        await LoanApi.makeRepayment(
-          appUser,
-          contractAddress,
-          month,
-          repayment.amount,
-          result.transactionHash!,
-          isComplete
-        );
+      if (result.success) {
+        // Refresh details
+        setRefreshTrigger(prev => prev + 1);
       }
-      
-      // Refresh details
-      setRefreshTrigger(prev => prev + 1);
       
       return result;
     } catch (err: any) {
@@ -269,11 +290,12 @@ export function useLoanAgreement(contractAddress?: string) {
       setRepaymentState({
         isProcessing: false,
         error: err.message || "Error making repayment",
-        isSuccess: false
+        isSuccess: false,
+        syncedWithBackend: false
       });
       return null;
     }
-  }, [contractAddress, signer, isConnected, details, userIsBorrower, currentUser]);
+  }, [contractAddress, signer, isConnected, details, userIsBorrower, getAppUser]);
   
   // Get unpaid months that are available for payment
   const getAvailableMonthsForPayment = useCallback(() => {
@@ -365,6 +387,31 @@ export function useLoanAgreement(contractAddress?: string) {
     return actions;
   }, [details, userIsLender, userIsBorrower, fundLoan, makeRepayment, fundingState.isProcessing, repaymentState.isProcessing]);
   
+  // Sync loan status with backend
+  const syncStatus = useCallback(async (): Promise<boolean> => {
+    if (!contractAddress || !signer || !isConnected) {
+      return false;
+    }
+    
+    try {
+      const appUser = await getAppUser();
+      if (!appUser) {
+        return false;
+      }
+      
+      const result = await LoanSyncService.syncLoanStatus(
+        appUser,
+        contractAddress,
+        signer
+      );
+      
+      return result.success && result.syncedWithBackend;
+    } catch (err) {
+      console.error("Error syncing loan status:", err);
+      return false;
+    }
+  }, [contractAddress, signer, isConnected, getAppUser]);
+  
   return {
     // Basic state
     details,
@@ -386,6 +433,7 @@ export function useLoanAgreement(contractAddress?: string) {
     getAvailableMonthsForPayment,
     getLoanSummary,
     getAvailableActions,
+    syncStatus,
     
     // Helper function to refresh data
     refreshData: () => setRefreshTrigger(prev => prev + 1)

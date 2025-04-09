@@ -8,7 +8,7 @@ import { Card } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { InfoCircledIcon, ExclamationTriangleIcon } from '@radix-ui/react-icons';
+import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 // Import custom components
 import StatusBanner from '../../components/loan/agreement/StatusBanner';
@@ -17,12 +17,14 @@ import ActionPanel from '../../components/loan/agreement/ActionPanel';
 import RepaymentSchedule from '../../components/loan/agreement/RepaymentSchedule';
 import LoanSummary from '../../components/loan/agreement/LoanSummary';
 import TransactionHistory from '../../components/loan/agreement/TransactionHistory';
+import StatusHistory from '../../components/loan/agreement/StatusHistory';
 
 const AgreementDetail = () => {
   const { address } = useParams<{ address: string }>();
   const navigate = useNavigate();
   const { isConnected } = useWallet();
   const [activeTab, setActiveTab] = useState('details');
+  const [syncing, setSyncing] = useState(false);
 
   // Use our loan agreement hook
   const {
@@ -37,7 +39,8 @@ const AgreementDetail = () => {
     makeRepayment,
     getLoanSummary,
     getAvailableActions,
-    refreshData
+    refreshData,
+    syncStatus
   } = useLoanAgreement(address);
 
   // Calculate available actions
@@ -60,6 +63,21 @@ const AgreementDetail = () => {
       navigate('/loans');
     }
   }, [address, navigate]);
+
+  // Handle manual sync
+  const handleSync = async () => {
+    if (!address) return;
+    
+    setSyncing(true);
+    try {
+      await syncStatus();
+      refreshData();
+    } catch (error) {
+      console.error('Error syncing with backend:', error);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Handle loading state
   if (loading && !details) {
@@ -126,7 +144,19 @@ const AgreementDetail = () => {
           </Button>
           <h1 className="text-2xl font-bold">Loan Agreement</h1>
         </div>
-        <StatusBanner status={details.status} />
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSync} 
+            disabled={syncing}
+            className="flex items-center gap-1"
+          >
+            <ReloadIcon className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Syncing...' : 'Sync Status'}
+          </Button>
+          <StatusBanner status={details.status} />
+        </div>
       </div>
 
       {/* Transaction alerts */}
@@ -146,6 +176,64 @@ const AgreementDetail = () => {
           <AlertTitle>Transaction in Progress</AlertTitle>
           <AlertDescription>
             Your repayment transaction is being processed...
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {fundingState.isSuccess && fundingState.syncedWithBackend && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircledIcon className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-600">Transaction Complete</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Your loan funding transaction was successful and has been recorded.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {repaymentState.isSuccess && repaymentState.syncedWithBackend && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircledIcon className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-600">Transaction Complete</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Your repayment transaction was successful and has been recorded.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {fundingState.isSuccess && !fundingState.syncedWithBackend && (
+        <Alert className="bg-yellow-50 border-yellow-200">
+          <InfoCircledIcon className="h-4 w-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-600">Partial Success</AlertTitle>
+          <AlertDescription className="text-yellow-700">
+            Your loan funding transaction was successful on the blockchain, but we couldn't record it in our database.
+            {fundingState.backendError && <span className="block mt-1">Error: {fundingState.backendError}</span>}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSync} 
+              className="mt-2 bg-yellow-100"
+            >
+              Retry Sync
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {repaymentState.isSuccess && !repaymentState.syncedWithBackend && (
+        <Alert className="bg-yellow-50 border-yellow-200">
+          <InfoCircledIcon className="h-4 w-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-600">Partial Success</AlertTitle>
+          <AlertDescription className="text-yellow-700">
+            Your repayment transaction was successful on the blockchain, but we couldn't record it in our database.
+            {repaymentState.backendError && <span className="block mt-1">Error: {repaymentState.backendError}</span>}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleSync} 
+              className="mt-2 bg-yellow-100"
+            >
+              Retry Sync
+            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -241,6 +329,7 @@ const AgreementDetail = () => {
             borrower={details.borrower}
             lender={details.lender}
           />
+          <StatusHistory loanAddress={address || ''} />
         </TabsContent>
       </Tabs>
     </div>
