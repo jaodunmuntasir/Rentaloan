@@ -134,6 +134,13 @@ const MakeOfferPanel: React.FC<MakeOfferPanelProps> = ({
                 </CardFooter>
               </Card>
             )}
+            {!userOffer && (
+              <Alert>
+                <AlertDescription>
+                  Although you have an offer, we couldn't load its details. Please refresh the page or contact support if this issue persists.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         ) : loanRequestStatus !== "OPEN" ? (
           <Alert variant="destructive">

@@ -25,9 +25,8 @@ interface IRentalAgreement {
 
     /**
      * @dev Receives rent payment from a loan
-     * @param month The month for which rent is being paid
      */
-    function receiveRentFromLoan(uint256 month) external payable;
+    function receiveRentFromLoan() external payable;
 
     /**
      * @dev Returns the available collateral amount

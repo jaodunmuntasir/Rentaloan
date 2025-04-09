@@ -194,6 +194,19 @@
   },
   {
     "inputs": [],
+    "name": "currentMonth",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "currentSecurityDeposit",
     "outputs": [
       {
@@ -295,6 +308,16 @@
         "internalType": "enum IRentalAgreement.ContractStatus",
         "name": "",
         "type": "uint8"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       },
       {
         "internalType": "uint256",
@@ -419,13 +442,7 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "month",
-        "type": "uint256"
-      }
-    ],
+    "inputs": [],
     "name": "receiveRentFromLoan",
     "outputs": [],
     "stateMutability": "payable",

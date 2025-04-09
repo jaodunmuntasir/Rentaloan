@@ -78,8 +78,13 @@ const SkipRent: React.FC<SkipRentProps> = ({
     );
   }
   
-  // Check if loan is active and has sufficient allowance
-  const canSkipRent = loanDetails.isActive && loanDetails.availableSkips > 0;
+  // Calculate skip availability based on rental contract, not loan
+  const usedSkips = rentalDetails.skippedMonths || 0;
+  const totalSkips = rentalDetails.gracePeriod || 0;
+  const availableSkips = Math.max(0, totalSkips - usedSkips);
+  
+  // Check if rent can be skipped (rental is active and has skip allowance)
+  const canSkipRent = rentalDetails.isActive && availableSkips > 0;
   
   // If security deposit not paid
   if (!rentalDetails.securityDepositPaid) {
@@ -131,11 +136,11 @@ const SkipRent: React.FC<SkipRentProps> = ({
         <CardTitle className="flex items-center">
           Skip Rent Payment
           <Badge variant="outline" className="ml-2 bg-blue-50 text-blue-600 border-blue-200">
-            <CreditCard className="h-3 w-3 mr-1" /> Loan-backed
+            <CreditCard className="h-3 w-3 mr-1" /> Rental Contract
           </Badge>
         </CardTitle>
         <CardDescription>
-          Use your loan to skip this month's rent payment
+          Skip this month's rent payment (adds to future payment)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -146,9 +151,9 @@ const SkipRent: React.FC<SkipRentProps> = ({
               <p className="text-2xl font-bold">{rentalDetails.rentAmount} ETH</p>
             </div>
             <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Remaining Skip Credits</p>
+              <p className="text-sm text-muted-foreground">Remaining Skip Allowance</p>
               <p className="text-2xl font-bold">
-                {loanDetails.availableSkips} / {loanDetails.totalSkips}
+                {availableSkips} / {totalSkips}
               </p>
             </div>
           </div>
@@ -157,26 +162,26 @@ const SkipRent: React.FC<SkipRentProps> = ({
         <div className="space-y-3">
           <h3 className="text-sm font-medium flex items-center">
             <CreditCard className="h-4 w-4 mr-2 text-muted-foreground" />
-            Loan Skip Credits
+            Skip Rent Allowance
           </h3>
           <div className="rounded-md overflow-hidden border">
             <div className="bg-primary/10 px-4 py-2 border-b">
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium">Skip Credits Used</span>
                 <span className="text-xs">
-                  {Math.round(((loanDetails.totalSkips - loanDetails.availableSkips) / loanDetails.totalSkips) * 100)}%
+                  {totalSkips > 0 ? Math.round((usedSkips / totalSkips) * 100) : 0}%
                 </span>
               </div>
             </div>
             <div className="p-4">
               <Progress
-                value={((loanDetails.totalSkips - loanDetails.availableSkips) / loanDetails.totalSkips) * 100}
+                value={totalSkips > 0 ? (usedSkips / totalSkips) * 100 : 0}
                 className="h-2 mb-2"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0</span>
-                <span>Used: {loanDetails.totalSkips - loanDetails.availableSkips}</span>
-                <span>Total: {loanDetails.totalSkips}</span>
+                <span>Used: {usedSkips}</span>
+                <span>Total: {totalSkips}</span>
               </div>
             </div>
           </div>
@@ -187,9 +192,9 @@ const SkipRent: React.FC<SkipRentProps> = ({
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Not Available</AlertTitle>
             <AlertDescription>
-              {!loanDetails.isActive
-                ? "Your loan agreement is not active. Please ensure your loan is properly initialized."
-                : "You have no skip credits available. You must make the regular rent payment."}
+              {!rentalDetails.isActive
+                ? "Your rental agreement is not active. Please ensure your security deposit is paid."
+                : "You have no skip allowance available. You must make the regular rent payment."}
             </AlertDescription>
           </Alert>
         )}
@@ -199,12 +204,24 @@ const SkipRent: React.FC<SkipRentProps> = ({
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Important Information</AlertTitle>
             <AlertDescription>
-              Using a skip credit means:
+              Skipping this month's rent means:
               <ul className="list-disc pl-5 mt-2 space-y-1">
-                <li>Your loan will cover this month's rent payment</li>
-                <li>You'll still need to repay this amount as part of your loan</li>
-                <li>Once used, a skip credit cannot be refunded</li>
+                <li>The rent amount will be added to your due balance</li>
+                <li>You'll need to pay the accumulated balance with your next rent payment</li>
+                <li>Your current due balance is {rentalDetails.dueAmount || '0'} ETH</li>
+                <li>Once used, a skip allowance cannot be refunded</li>
               </ul>
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        {rentalDetails.dueAmount && Number(rentalDetails.dueAmount) > 0 && (
+          <Alert className="bg-yellow-50 border-yellow-200">
+            <AlertTriangle className="h-4 w-4 text-yellow-600" />
+            <AlertTitle className="text-yellow-600">Outstanding Balance</AlertTitle>
+            <AlertDescription className="text-yellow-700">
+              You have an outstanding balance of {rentalDetails.dueAmount} ETH.
+              Skipping rent will increase this amount.
             </AlertDescription>
           </Alert>
         )}
@@ -222,9 +239,9 @@ const SkipRent: React.FC<SkipRentProps> = ({
               Processing...
             </>
           ) : !canSkipRent ? (
-            !loanDetails.isActive
-              ? "Loan Not Active"
-              : "No Skip Credits Available"
+            !rentalDetails.isActive
+              ? "Rental Not Active"
+              : "No Skip Allowance Available"
           ) : (
             `Skip This Month's Rent (${rentalDetails.rentAmount} ETH)`
           )}

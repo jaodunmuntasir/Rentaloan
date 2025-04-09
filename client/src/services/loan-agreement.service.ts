@@ -354,63 +354,6 @@ export class LoanAgreementService {
   }
 
   /**
-   * Set up event listeners for the loan agreement
-   * 
-   * @param address The loan agreement contract address
-   * @param provider The ethers.js provider
-   * @param callback Function to call when events are emitted
-   * @returns The contract instance with attached listeners
-   */
-  public static listenForEvents(
-    address: string, 
-    provider: ethers.Provider, 
-    callback: (event: string, data: any) => void
-  ): ethers.Contract {
-    try {
-      // Use provider for read-only operations
-      const contract = new ethers.Contract(address, LoanAgreementABI, provider);
-      
-      // Set up event listeners
-      contract.on('StatusChanged', (oldStatus, newStatus, event) => {
-        callback('StatusChanged', {
-          oldStatus: Number(oldStatus),
-          newStatus: Number(newStatus),
-          transactionHash: event.log.transactionHash
-        });
-      });
-      
-      contract.on('RepaymentMade', (month, amount, event) => {
-        callback('RepaymentMade', {
-          month: Number(month),
-          amount: ethers.formatEther(amount),
-          transactionHash: event.log.transactionHash
-        });
-      });
-      
-      contract.on('LoanClosed', (reason, status, event) => {
-        callback('LoanClosed', {
-          reason,
-          status: Number(status),
-          transactionHash: event.log.transactionHash
-        });
-      });
-      
-      contract.on('LoanStarted', (amount, collateral, event) => {
-        callback('LoanStarted', {
-          amount: ethers.formatEther(amount),
-          collateral: ethers.formatEther(collateral),
-          transactionHash: event.log.transactionHash
-        });
-      });
-      
-      return contract;
-    } catch (error) {
-      console.error('Error setting up event listeners:', error);
-      throw new Error(`Failed to set up event listeners: ${(error as Error).message}`);
-    }
-  }
-
-  /**
    * Format loan status to a human-readable string
    * 
    * @param statusCode The numeric status code from the contract

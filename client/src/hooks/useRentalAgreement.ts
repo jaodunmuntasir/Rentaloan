@@ -32,6 +32,7 @@ interface RentalAgreementDetails {
   address: string;
   landlordAddress: string;
   tenantAddress: string;
+  skippedMonths?: number;
 }
 
 export function useRentalAgreement(contractAddress?: string) {
@@ -103,6 +104,9 @@ export function useRentalAgreement(contractAddress?: string) {
         const lastPaidMonth = Number(details[8]);
         const dueAmount = details[9];
         
+        // Get skipped months count
+        const skippedMonths = Number(await contract.skippedMonths());
+        
         // Format eth values
         const securityDeposit = ethers.formatEther(securityDepositWei);
         const rentAmount = ethers.formatEther(baseRentWei);
@@ -119,7 +123,8 @@ export function useRentalAgreement(contractAddress?: string) {
           status: statusValue,
           currentSecurityDeposit,
           lastPaidMonth,
-          dueAmount: ethers.formatEther(dueAmount)
+          dueAmount: ethers.formatEther(dueAmount),
+          skippedMonths
         };
         
       } catch (contractErr) {
@@ -133,6 +138,7 @@ export function useRentalAgreement(contractAddress?: string) {
           const securityDeposit = ethers.formatEther(await contract.securityDeposit());
           const baseRent = ethers.formatEther(await contract.getBaseRent());
           const status = Number(await contract.getContractStatus());
+          const skippedMonths = Number(await contract.skippedMonths());
           
           blockchainData = {
             landlord,
@@ -140,7 +146,8 @@ export function useRentalAgreement(contractAddress?: string) {
             rentDuration,
             securityDeposit,
             rentAmount: baseRent,
-            status
+            status,
+            skippedMonths
           };
         } catch (err) {
           console.error("Failed to read individual contract data:", err);
@@ -225,7 +232,8 @@ export function useRentalAgreement(contractAddress?: string) {
         // New fields from BlockchainService
         address: contractAddress,
         landlordAddress: blockchainData.landlord,
-        tenantAddress: blockchainData.tenant
+        tenantAddress: blockchainData.tenant,
+        skippedMonths: blockchainData.skippedMonths
       });
     } catch (err: any) {
       setError(err.message || "Error loading rental details");

@@ -8,7 +8,7 @@ import { Card } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Skeleton } from '../../components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
-import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon, ReloadIcon } from '@radix-ui/react-icons';
+import { InfoCircledIcon, ExclamationTriangleIcon, CheckCircledIcon } from '@radix-ui/react-icons';
 
 // Import custom components
 import StatusBanner from '../../components/loan/agreement/StatusBanner';
@@ -16,15 +16,12 @@ import LoanDetailsPanel from '../../components/loan/agreement/LoanDetailsPanel';
 import ActionPanel from '../../components/loan/agreement/ActionPanel';
 import RepaymentSchedule from '../../components/loan/agreement/RepaymentSchedule';
 import LoanSummary from '../../components/loan/agreement/LoanSummary';
-import TransactionHistory from '../../components/loan/agreement/TransactionHistory';
-import StatusHistory from '../../components/loan/agreement/StatusHistory';
 
 const AgreementDetail = () => {
   const { address } = useParams<{ address: string }>();
   const navigate = useNavigate();
   const { isConnected } = useWallet();
   const [activeTab, setActiveTab] = useState('details');
-  const [syncing, setSyncing] = useState(false);
 
   // Use our loan agreement hook
   const {
@@ -39,8 +36,7 @@ const AgreementDetail = () => {
     makeRepayment,
     getLoanSummary,
     getAvailableActions,
-    refreshData,
-    syncStatus
+    refreshData
   } = useLoanAgreement(address);
 
   // Calculate available actions
@@ -63,21 +59,6 @@ const AgreementDetail = () => {
       navigate('/loans');
     }
   }, [address, navigate]);
-
-  // Handle manual sync
-  const handleSync = async () => {
-    if (!address) return;
-    
-    setSyncing(true);
-    try {
-      await syncStatus();
-      refreshData();
-    } catch (error) {
-      console.error('Error syncing with backend:', error);
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // Handle loading state
   if (loading && !details) {
@@ -144,17 +125,7 @@ const AgreementDetail = () => {
           </Button>
           <h1 className="text-2xl font-bold">Loan Agreement</h1>
         </div>
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleSync} 
-            disabled={syncing}
-            className="flex items-center gap-1"
-          >
-            <ReloadIcon className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Syncing...' : 'Sync Status'}
-          </Button>
+        <div>
           <StatusBanner status={details.status} />
         </div>
       </div>
@@ -207,14 +178,6 @@ const AgreementDetail = () => {
           <AlertDescription className="text-yellow-700">
             Your loan funding transaction was successful on the blockchain, but we couldn't record it in our database.
             {fundingState.backendError && <span className="block mt-1">Error: {fundingState.backendError}</span>}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleSync} 
-              className="mt-2 bg-yellow-100"
-            >
-              Retry Sync
-            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -226,14 +189,6 @@ const AgreementDetail = () => {
           <AlertDescription className="text-yellow-700">
             Your repayment transaction was successful on the blockchain, but we couldn't record it in our database.
             {repaymentState.backendError && <span className="block mt-1">Error: {repaymentState.backendError}</span>}
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleSync} 
-              className="mt-2 bg-yellow-100"
-            >
-              Retry Sync
-            </Button>
           </AlertDescription>
         </Alert>
       )}
@@ -284,11 +239,10 @@ const AgreementDetail = () => {
 
       {/* Content Tabs */}
       <Tabs defaultValue="details" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-4 mb-4">
+        <TabsList className="grid grid-cols-3 mb-4">
           <TabsTrigger value="details">Details</TabsTrigger>
           <TabsTrigger value="repayments">Repayments</TabsTrigger>
           <TabsTrigger value="summary">Summary</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
         
         {/* Details Tab */}
@@ -302,13 +256,21 @@ const AgreementDetail = () => {
         
         {/* Repayments Tab */}
         <TabsContent value="repayments" className="space-y-4">
-          <RepaymentSchedule 
-            repaymentSchedule={details.repaymentSchedule}
-            lastPaidMonth={details.lastPaidMonth}
-            onMakePayment={makeRepayment}
-            isProcessing={repaymentState.isProcessing}
-            isBorrower={isBorrower}
-          />
+          {(details.status === LoanStatus.PAID || details.status === LoanStatus.ACTIVE) ? (
+            <RepaymentSchedule 
+              repaymentSchedule={details.repaymentSchedule}
+              lastPaidMonth={details.lastPaidMonth}
+              onMakePayment={makeRepayment}
+              isProcessing={repaymentState.isProcessing}
+              isBorrower={isBorrower}
+            />
+          ) : (
+            <Card className="p-6">
+              <div className="text-center text-muted-foreground">
+                Repayment schedule will be available once the loan is active.
+              </div>
+            </Card>
+          )}
         </TabsContent>
         
         {/* Summary Tab */}
@@ -320,16 +282,6 @@ const AgreementDetail = () => {
               duration={details.duration}
             />
           )}
-        </TabsContent>
-        
-        {/* History Tab */}
-        <TabsContent value="history" className="space-y-4">
-          <TransactionHistory 
-            loanAddress={address || ''}
-            borrower={details.borrower}
-            lender={details.lender}
-          />
-          <StatusHistory loanAddress={address || ''} />
         </TabsContent>
       </Tabs>
     </div>

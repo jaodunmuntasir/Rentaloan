@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth';
 import { User } from '../../models/user.model';
 import { RentalAgreement } from '../../models/rental-agreement.model';
 import { LoanRequest, LoanRequestStatus } from '../../models/loan-request.model';
+import { LoanOffer } from '../../models/loan-offer.model';
 
 const router = express.Router();
 
@@ -365,10 +366,21 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
     });
     console.log('Loan request with related data found:', loanRequestWithData ? 'Yes' : 'No');
     
+    // Step 3: Get all loan offers for this request
+    console.log('Step 3: Finding loan offers for request ID:', id);
+    const loanOffers = await LoanOffer.findAll({
+      where: { loanRequestId: id },
+      include: [
+        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress', 'firebaseId'] }
+      ]
+    });
+    console.log(`Found ${loanOffers.length} loan offers for this request`);
+    
     // Success response
     res.json({ 
       success: true,
-      loanRequest: loanRequestWithData 
+      loanRequest: loanRequestWithData,
+      loanOffers: loanOffers 
     });
   } catch (error) {
     console.error('Error retrieving loan request details:', error);

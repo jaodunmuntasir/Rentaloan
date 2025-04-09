@@ -327,13 +327,17 @@ export const LoanApi = {
       requestId: string;
       interestRate: number;
       offerAmount: string;
+      duration: number;
+      graceMonths?: number;
     }
   ): Promise<{ loanOffer: any; success: boolean; error?: string }> {
     try {
       const response = await apiCall('/api/loan/offer', 'POST', user, {
         loanRequestId: data.requestId,
         interestRate: data.interestRate,
-        offerAmount: data.offerAmount
+        offerAmount: data.offerAmount,
+        duration: data.duration,
+        graceMonths: data.graceMonths || 1 // Default to 1 if not provided
       });
 
       return {
@@ -386,7 +390,14 @@ export const LoanApi = {
     }
   ): Promise<{ loanAgreement: any; success: boolean; error?: string }> {
     try {
-      const response = await apiCall('/api/loan/agreement/register', 'POST', user, data);
+      // Transform the parameters to match what the server expects
+      const serverData = {
+        loanOfferId: data.offerId,
+        contractAddress: data.contractAddress,
+        transactionHash: data.transactionHash
+      };
+      
+      const response = await apiCall('/api/loan/agreement/register', 'POST', user, serverData);
 
       return {
         loanAgreement: response?.loanAgreement || null,

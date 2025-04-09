@@ -51,9 +51,6 @@ export function useLoanAgreement(contractAddress?: string) {
   const { signer, walletAddress, isConnected } = useWallet();
   const { currentUser } = useAuth();
   
-  // Event listener cleanup reference
-  const [eventListenerContract, setEventListenerContract] = useState<ethers.Contract | null>(null);
-  
   // Helper to create App User object for API calls
   const getAppUser = useCallback(async () => {
     if (!currentUser) return null;
@@ -91,26 +88,13 @@ export function useLoanAgreement(contractAddress?: string) {
         setUserIsLender(isLender);
       }
       
-      // Synchronize status with backend
-      const appUser = await getAppUser();
-      if (appUser && signer) {
-        LoanSyncService.syncLoanStatus(appUser, contractAddress, signer)
-          .then(result => {
-            if (!result.success) {
-              console.warn('Failed to sync loan status with backend:', result.error);
-            }
-          })
-          .catch(err => {
-            console.error('Error syncing loan status:', err);
-          });
-      }
     } catch (err: any) {
       console.error("Error loading loan details:", err);
       setError(err.message || "Error loading loan details");
     } finally {
       setLoading(false);
     }
-  }, [contractAddress, signer, isConnected, walletAddress, getAppUser]);
+  }, [contractAddress, signer, isConnected, walletAddress]);
   
   // Refresh details when refresh trigger changes
   useEffect(() => {
@@ -125,54 +109,6 @@ export function useLoanAgreement(contractAddress?: string) {
       loadDetails();
     }
   }, [contractAddress, signer, isConnected, loadDetails]);
-  
-  // Set up event listeners
-  useEffect(() => {
-    if (!contractAddress || !isConnected) return;
-    
-    // Get provider from signer
-    const provider = signer?.provider;
-    if (!provider) return;
-    
-    // Clean up previous listeners
-    if (eventListenerContract) {
-      eventListenerContract.removeAllListeners();
-    }
-    
-    // Set up new event listeners
-    const contract = LoanAgreementService.listenForEvents(
-      contractAddress,
-      provider,
-      async (eventName, data) => {
-        console.log(`Event received: ${eventName}`, data);
-        
-        // Handle status changes with backend sync
-        if (eventName === 'StatusChanged' && data.newStatus !== undefined) {
-          const appUser = await getAppUser();
-          if (appUser && data.transactionHash) {
-            LoanSyncService.recordStatusChange(
-              appUser,
-              contractAddress,
-              Number(data.newStatus),
-              data.transactionHash
-            ).catch(err => {
-              console.error('Error recording status change:', err);
-            });
-          }
-        }
-        
-        // Refresh data when events occur
-        setRefreshTrigger(prev => prev + 1);
-      }
-    );
-    
-    setEventListenerContract(contract);
-    
-    // Cleanup function
-    return () => {
-      contract.removeAllListeners();
-    };
-  }, [contractAddress, signer, isConnected, eventListenerContract, getAppUser]);
   
   // Fund loan (for lender)
   const fundLoan = useCallback(async (): Promise<SyncResult | null> => {
@@ -387,31 +323,6 @@ export function useLoanAgreement(contractAddress?: string) {
     return actions;
   }, [details, userIsLender, userIsBorrower, fundLoan, makeRepayment, fundingState.isProcessing, repaymentState.isProcessing]);
   
-  // Sync loan status with backend
-  const syncStatus = useCallback(async (): Promise<boolean> => {
-    if (!contractAddress || !signer || !isConnected) {
-      return false;
-    }
-    
-    try {
-      const appUser = await getAppUser();
-      if (!appUser) {
-        return false;
-      }
-      
-      const result = await LoanSyncService.syncLoanStatus(
-        appUser,
-        contractAddress,
-        signer
-      );
-      
-      return result.success && result.syncedWithBackend;
-    } catch (err) {
-      console.error("Error syncing loan status:", err);
-      return false;
-    }
-  }, [contractAddress, signer, isConnected, getAppUser]);
-  
   return {
     // Basic state
     details,
@@ -433,7 +344,6 @@ export function useLoanAgreement(contractAddress?: string) {
     getAvailableMonthsForPayment,
     getLoanSummary,
     getAvailableActions,
-    syncStatus,
     
     // Helper function to refresh data
     refreshData: () => setRefreshTrigger(prev => prev + 1)

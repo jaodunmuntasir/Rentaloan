@@ -1,6 +1,6 @@
 import { ethers } from "ethers";
 import * as readline from "readline";
-import RentalAgreementABI from "../client/src/contracts/ABI/RentalAgreement.json";
+import RentalAgreementABI from "../contracts/ABI/RentalAgreement.json";
 
 // Creates a readline interface for user input
 const rl = readline.createInterface({
@@ -61,6 +61,7 @@ async function main() {
         try {
           // Use getContractDetails to get most information in one call
           const details = await rentalContract.getContractDetails();
+          // const moreDetails = await rentalContract.getMoreContractDetails();
           // Based on ABI, details contains:
           // [landlord, renter, duration, securityDeposit, baseRent, lastPaid, status, gracePeriod, startTime, skippedMonths]
           
@@ -86,17 +87,18 @@ async function main() {
           console.log("Loan Factory:          ", loanFactoryAddress);
           
           console.log("\n--- Rental Terms ---");
-          console.log("Start Time:            ", new Date(Number(details[8]) * 1000).toLocaleString()); // startTime
           console.log("Duration:              ", Number(details[2]), "months"); // duration
           console.log("Base Rent:             ", ethers.formatEther(details[4]), "ETH"); // baseRent
           console.log("Security Deposit:      ", ethers.formatEther(details[3]), "ETH"); // securityDeposit
           console.log("Current Deposit:       ", ethers.formatEther(currentSecurityDeposit), "ETH");
-          console.log("Grace Period:          ", Number(details[7]), "days"); // gracePeriod
+          console.log("Grace Period:          ", Number(details[5]), "months"); // gracePeriod
           
           console.log("\n--- Payment Status ---");
-          console.log("Last Paid Month:       ", Number(details[5])); // lastPaid
-          console.log("Due Amount:            ", ethers.formatEther(dueAmount), "ETH");
-          console.log("Skipped Months:        ", Number(details[9])); // skippedMonths
+          console.log("Last Paid Month:       ", Number(details[8])); // lastPaid
+          console.log("Due Amount:            ", ethers.formatEther(details[9]), "ETH");
+          console.log("Current Month:         ", Number(details[11]));
+          console.log("Skipped Months:        ", Number(details[10])); // skippedMonths
+
           
           // Get payment history
           console.log("\n--- Payment History ---");

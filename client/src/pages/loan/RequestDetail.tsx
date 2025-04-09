@@ -12,6 +12,7 @@ import {
   TabsTrigger,
 } from "../../components/ui/tabs";
 import { Badge } from "../../components/ui/badge";
+import { useWallet } from "../../contexts/WalletContext";
 
 // Import our new components
 import RequestDetailHeader from "../../components/loan/RequestDetailHeader";
@@ -84,17 +85,11 @@ const LoanRequestDetail: React.FC = () => {
     address: string;
     id: string;
   }>();
-  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { showToast } = useToast();
-
-  // Get rental agreement details directly from blockchain
-  const {
-    details: rentalDetails,
-    loading: rentalLoading,
-    error: rentalError,
-  } = useRentalAgreement(rentalAddress || "");
-
+  const navigate = useNavigate();
+  const { isConnected } = useWallet();
+  
   const [activeTab, setActiveTab] = useState("details");
   const [loading, setLoading] = useState(true);
   const [loanRequest, setLoanRequest] = useState<LoanRequest | null>(null);
@@ -102,6 +97,13 @@ const LoanRequestDetail: React.FC = () => {
   const [availableCollateral, setAvailableCollateral] = useState<string>("0");
   const [error, setError] = useState<string | null>(null);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+
+  // Get rental agreement details directly from blockchain
+  const {
+    details: rentalDetails,
+    loading: rentalLoading,
+    error: rentalError,
+  } = useRentalAgreement(rentalAddress || "");
 
   // Helper to create App User from Firebase User for API calls
   const createAppUser = async () => {
@@ -134,6 +136,14 @@ const LoanRequestDetail: React.FC = () => {
       if (!rentalAddress) return;
 
       try {
+        // Check if we can access wallet-specific blockchain data
+        // Don't try to get collateral info if wallet isn't connected
+        if (!isConnected) {
+          console.log("Wallet not connected, using default collateral values");
+          setAvailableCollateral("0");
+          return;
+        }
+
         // Get available collateral info from blockchain
         const collateralInfo = await BlockchainService.getAvailableCollateral(
           rentalAddress
@@ -149,7 +159,7 @@ const LoanRequestDetail: React.FC = () => {
     };
 
     fetchCollateralData();
-  }, [rentalAddress, showToast]);
+  }, [rentalAddress, showToast, isConnected]);
 
   // Fetch loan request details
   const fetchLoanRequestData = async () => {
@@ -184,6 +194,20 @@ const LoanRequestDetail: React.FC = () => {
         setLoanRequest(response.loanRequest);
         setLoanOffers(response.loanOffers || []);
         // We'll get availableCollateral from blockchain directly
+        console.log("Loan request fetch successful:", {
+          loanRequest: {
+            id: response.loanRequest.id,
+            status: response.loanRequest.status,
+            amount: response.loanRequest.amount
+          },
+          loanOffers: response.loanOffers?.map(o => ({
+            id: o.id,
+            lenderEmail: o.lender?.email,
+            lenderId: o.lender?.id,
+            status: o.status
+          })) || [],
+          offersCount: response.loanOffers?.length || 0
+        });
       } else {
         const errorMessage =
           response.error || "Failed to load loan request data";
@@ -378,7 +402,8 @@ const LoanRequestDetail: React.FC = () => {
       const response = await LoanApi.createLoanOffer(appUser, {
         requestId: loanRequest.id,
         interestRate: interestRateInt,
-        offerAmount: amount
+        offerAmount: amount,
+        duration: duration
       });
       
       if (response && response.loanOffer) {
@@ -559,24 +584,103 @@ const LoanRequestDetail: React.FC = () => {
 
   // Check if user has already made an offer
   const userHasOffer = (): boolean => {
-    if (!currentUser || !loanOffers.length) return false;
+    if (!currentUser || !loanOffers.length) {
+      console.log("userHasOffer: No user or no offers", { 
+        hasUser: !!currentUser, 
+        offersCount: loanOffers.length 
+      });
+      return false;
+    }
 
-    return loanOffers.some(
-      (offer) =>
-        offer.lender?.email === currentUser.email ||
-        offer.lender?.id === currentUser.uid
+    // Check for matching by email (most reliable)
+    // or by comparing the lender.id with the user's uid
+    // or by checking if the lenderId directly matches the user's uid
+    const hasOffer = loanOffers.some(
+      (offer) => {
+        // Check by email first (most reliable)
+        if (offer.lender?.email && currentUser.email && 
+            offer.lender.email.toLowerCase() === currentUser.email.toLowerCase()) {
+          return true;
+        }
+        
+        // Check if lender.id matches user's uid
+        if (offer.lender?.id && offer.lender.id === currentUser.uid) {
+          return true;
+        }
+        
+        // Check if the lenderId directly matches user's uid
+        if (offer.lenderId && offer.lenderId === currentUser.uid) {
+          return true;
+        }
+        
+        return false;
+      }
     );
+    
+    console.log("userHasOffer result:", hasOffer, {
+      currentUser: {
+        email: currentUser.email,
+        uid: currentUser.uid
+      },
+      offers: loanOffers.map(o => ({
+        id: o.id,
+        lenderId: o.lenderId,
+        lenderEmail: o.lender?.email,
+        lenderId2: o.lender?.id,
+        match: o.lender?.email?.toLowerCase() === currentUser.email?.toLowerCase() || 
+               o.lender?.id === currentUser.uid || 
+               o.lenderId === currentUser.uid
+      }))
+    });
+    
+    return hasOffer;
   };
 
   // Get user's offer
   const getUserOffer = (): LoanOffer | null => {
-    if (!currentUser || !loanOffers.length) return null;
+    if (!currentUser || !loanOffers.length) {
+      console.log("getUserOffer: No user or no offers", { 
+        hasUser: !!currentUser, 
+        offersCount: loanOffers.length 
+      });
+      return null;
+    }
 
+    // Find offer using the same criteria as userHasOffer
     const userOffer = loanOffers.find(
-      (offer) =>
-        offer.lender?.email === currentUser.email ||
-        offer.lender?.id === currentUser.uid
+      (offer) => {
+        // Check by email first (most reliable)
+        if (offer.lender?.email && currentUser.email && 
+            offer.lender.email.toLowerCase() === currentUser.email.toLowerCase()) {
+          return true;
+        }
+        
+        // Check if lender.id matches user's uid
+        if (offer.lender?.id && offer.lender.id === currentUser.uid) {
+          return true;
+        }
+        
+        // Check if the lenderId directly matches user's uid
+        if (offer.lenderId && offer.lenderId === currentUser.uid) {
+          return true;
+        }
+        
+        return false;
+      }
     );
+    
+    console.log("getUserOffer result:", !!userOffer, {
+      userOffer: userOffer ? {
+        id: userOffer.id,
+        lenderId: userOffer.lenderId,
+        interestRate: userOffer.interestRate,
+        status: userOffer.status
+      } : null,
+      currentUser: {
+        email: currentUser.email,
+        uid: currentUser.uid
+      }
+    });
     
     return userOffer || null;
   };

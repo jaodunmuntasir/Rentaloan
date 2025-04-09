@@ -102,58 +102,49 @@ router.post('/register', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    // Check contract details from the blockchain
-    try {
-      // Create loan agreement record
-      const loanAgreement = await LoanAgreement.create({
-        contractAddress,
-        loanRequestId: loanOffer.loanRequestId,
-        loanOfferId: loanOffer.id,
-        borrowerId: loanOffer.loanRequest.requesterId,
-        lenderId: loanOffer.lenderId,
-        amount: loanOffer.amount || loanOffer.loanRequest.amount, // Use offer amount if available, otherwise request amount
-        interestRate: loanOffer.interestRate,
-        duration: loanOffer.duration,
-        status: LoanAgreementStatus.INITIALIZED,
-        startDate: new Date()
-      });
+    // Create loan agreement record
+    const loanAgreement = await LoanAgreement.create({
+      contractAddress,
+      loanRequestId: loanOffer.loanRequestId,
+      loanOfferId: loanOffer.id,
+      borrowerId: loanOffer.loanRequest.requesterId,
+      lenderId: loanOffer.lenderId,
+      amount: loanOffer.amount || loanOffer.loanRequest.amount, // Use offer amount if available, otherwise request amount
+      interestRate: loanOffer.interestRate,
+      duration: loanOffer.duration,
+      graceMonths: 1, // Default to 1 for grace months since we're not implementing this feature now
+      status: LoanAgreementStatus.INITIALIZED,
+      startDate: new Date()
+    });
 
-      // Update loan request status
-      await LoanRequest.update(
-        { status: LoanRequestStatus.CLOSED },
-        { where: { id: loanOffer.loanRequestId } }
-      );
+    // Update loan request status
+    await LoanRequest.update(
+      { status: LoanRequestStatus.CLOSED },
+      { where: { id: loanOffer.loanRequestId } }
+    );
 
-      // Fetch the created agreement with related data
-      const completeAgreement = await LoanAgreement.findByPk(loanAgreement.id, {
-        include: [
-          { model: LoanRequest },
-          { model: User, as: 'borrower' },
-          { model: User, as: 'lender' }
-        ]
-      });
+    // Fetch the created agreement with related data
+    const completeAgreement = await LoanAgreement.findByPk(loanAgreement.id, {
+      include: [
+        { model: LoanRequest },
+        { model: User, as: 'borrower' },
+        { model: User, as: 'lender' }
+      ]
+    });
 
-      console.log('Created loan agreement:', {
-        id: loanAgreement.id,
-        contractAddress: loanAgreement.contractAddress,
-        borrowerId: loanAgreement.borrowerId,
-        lenderId: loanAgreement.lenderId,
-        status: loanAgreement.status
-      });
+    console.log('Created loan agreement:', {
+      id: loanAgreement.id,
+      contractAddress: loanAgreement.contractAddress,
+      borrowerId: loanAgreement.borrowerId,
+      lenderId: loanAgreement.lenderId,
+      status: loanAgreement.status
+    });
 
-      res.status(201).json({
-        success: true,
-        message: "Loan agreement registered successfully",
-        loanAgreement: completeAgreement
-      });
-    } catch (error) {
-      console.error("Error verifying blockchain contract:", error);
-      res.status(400).json({ 
-        success: false, 
-        message: "Failed to verify blockchain contract", 
-        error: error instanceof Error ? error.message : String(error) 
-      });
-    }
+    res.status(201).json({
+      success: true,
+      message: "Loan agreement registered successfully",
+      loanAgreement: completeAgreement
+    });
   } catch (error) {
     console.error("Error registering loan agreement:", error);
     res.status(500).json({ 

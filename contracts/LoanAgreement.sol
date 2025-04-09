@@ -146,10 +146,7 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         IRentalAgreement rental = IRentalAgreement(rentalContract);
         
         // Transfer the loan amount to the rental contract to pay rent
-        rental.receiveRentFromLoan{value: loanAmount}(lastPaidMonth + 1);
-        
-        // Update lastPaidMonth to 1 since we just paid the first month
-        lastPaidMonth = 1; 
+        rental.receiveRentFromLoan{value: loanAmount};
         
         // Update status to PAID
         Status oldStatus = _status;
