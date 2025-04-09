@@ -329,6 +329,7 @@ router.get('/:address', authenticate, async (req: Request, res: Response) => {
 router.post('/:address/initialize', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
+    const { transactionHash } = req.body; // Now client provides txHash
     console.log(`POST /loan/agreement/${address}/initialize - Request received from user:`, req.user?.uid);
     
     // Validate address parameter
@@ -336,6 +337,14 @@ router.post('/:address/initialize', authenticate, async (req: Request, res: Resp
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid loan agreement address' 
+      });
+    }
+    
+    // Validate transaction hash
+    if (!transactionHash || !transactionHash.startsWith('0x')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid transaction hash is required'
       });
     }
     
@@ -380,14 +389,7 @@ router.post('/:address/initialize', authenticate, async (req: Request, res: Resp
     }
     
     try {
-      // Call blockchain service to initialize loan
-      const tx = await BlockchainService.initializeLoan(
-        address,
-        user.walletAddress,
-        loanAgreement.amount.toString()
-      );
-      
-      // Update loan status
+      // Update loan status directly - blockchain state is already updated by client
       await loanAgreement.update({ status: LoanAgreementStatus.ACTIVE });
       
       // Record payment
@@ -396,29 +398,29 @@ router.post('/:address/initialize', authenticate, async (req: Request, res: Resp
         payerId: user.id,
         recipientId: loanAgreement.borrowerId,
         amount: loanAgreement.amount,
-        txHash: tx.transactionHash,
+        txHash: transactionHash,
         type: PaymentType.LOAN_INITIALIZATION,
         paymentDate: new Date()
       });
       
       res.json({
         success: true,
-        message: "Loan initialized successfully",
-        transactionHash: tx.transactionHash
+        message: "Loan initialization recorded successfully",
+        transactionHash: transactionHash
       });
     } catch (error) {
-      console.error("Error initializing loan:", error);
+      console.error("Error recording loan initialization:", error);
       res.status(400).json({ 
         success: false, 
-        message: "Failed to initialize loan", 
+        message: "Failed to record loan initialization", 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
   } catch (error) {
-    console.error("Error initializing loan:", error);
+    console.error("Error processing loan initialization:", error);
     res.status(500).json({ 
       success: false, 
-      message: "Failed to initialize loan", 
+      message: "Failed to process loan initialization", 
       error: error instanceof Error ? error.message : String(error) 
     });
   }
@@ -429,7 +431,7 @@ router.post('/:address/initialize', authenticate, async (req: Request, res: Resp
 router.post('/:address/repay', authenticate, async (req: Request, res: Response) => {
   try {
     const { address } = req.params;
-    const { month, amount } = req.body;
+    const { month, amount, transactionHash } = req.body;
     console.log(`POST /loan/agreement/${address}/repay - Request received from user:`, req.user?.uid);
     
     // Validate parameters
@@ -451,6 +453,14 @@ router.post('/:address/repay', authenticate, async (req: Request, res: Response)
       return res.status(400).json({ 
         success: false, 
         message: 'Amount is required' 
+      });
+    }
+    
+    // Validate transaction hash
+    if (!transactionHash || !transactionHash.startsWith('0x')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid transaction hash is required'
       });
     }
     
@@ -495,50 +505,42 @@ router.post('/:address/repay', authenticate, async (req: Request, res: Response)
     }
     
     try {
-      // Call blockchain service to make repayment
-      const tx = await BlockchainService.makeRepayment(
-        address,
-        user.walletAddress,
-        parseInt(month),
-        amount
-      );
-      
-      // Record payment
+      // Record payment from client-side transaction
       await Payment.create({
         loanAgreementId: loanAgreement.id,
         payerId: user.id,
         recipientId: loanAgreement.lenderId,
         amount: amount,
-        txHash: tx.transactionHash,
+        txHash: transactionHash,
         type: PaymentType.LOAN_REPAYMENT,
         month: parseInt(month),
         paymentDate: new Date()
       });
       
-      // Check if this was the final payment
-      const details = await BlockchainService.getLoanAgreementDetails(address);
-      if (details && details.status === 4) { // COMPLETED status
+      // Mark as complete if client reports final payment
+      const isComplete = req.body.isComplete === true;
+      if (isComplete) {
         await loanAgreement.update({ status: LoanAgreementStatus.COMPLETED });
       }
       
       res.json({
         success: true,
-        message: "Loan repayment made successfully",
-        transactionHash: tx.transactionHash
+        message: "Loan repayment recorded successfully",
+        transactionHash: transactionHash
       });
     } catch (error) {
-      console.error("Error making loan repayment:", error);
+      console.error("Error recording loan repayment:", error);
       res.status(400).json({ 
         success: false, 
-        message: "Failed to make loan repayment", 
+        message: "Failed to record loan repayment", 
         error: error instanceof Error ? error.message : String(error) 
       });
     }
   } catch (error) {
-    console.error("Error making loan repayment:", error);
+    console.error("Error processing loan repayment:", error);
     res.status(500).json({ 
       success: false, 
-      message: "Failed to make loan repayment", 
+      message: "Failed to process loan repayment", 
       error: error instanceof Error ? error.message : String(error) 
     });
   }

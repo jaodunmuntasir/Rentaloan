@@ -480,4 +480,92 @@ export class BlockchainService {
       throw new Error('Failed to fetch rental contract address from blockchain');
     }
   }
+  
+  /**
+   * Withdraw collateral from the rental contract to the loan contract
+   * @param contractAddress The loan agreement contract address
+   * @returns The transaction hash
+   */
+  static async withdrawCollateral(contractAddress: string): Promise<string> {
+    try {
+      const { signer } = this.getWalletConnection();
+      if (!signer) throw new Error('Wallet not connected');
+      
+      console.log('Attempting to withdraw collateral from loan contract:', contractAddress);
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
+      
+      // Get the signer's address for debugging
+      const signerAddress = await signer.getAddress();
+      console.log('Transaction sender address:', signerAddress);
+      
+      // Get rental contract address
+      const rentalAddress = await contract.rentalContract();
+      console.log('Rental contract address:', rentalAddress);
+      
+      // Check loan status before withdrawal
+      const status = await contract.getStatus();
+      console.log('Current loan status:', status, '(Initialized=0)');
+      
+      // Check borrower address
+      const borrower = await contract.getBorrower();
+      console.log('Contract borrower:', borrower, 'Signer:', signerAddress, 
+                 'Is signer the borrower:', borrower.toLowerCase() === signerAddress.toLowerCase());
+      
+      // Get the collateral amount
+      const collateralAmount = await contract.getCollateralAmount();
+      console.log('Collateral amount:', ethers.formatEther(collateralAmount));
+      
+      // Call withdrawCollateral function
+      console.log('Calling withdrawCollateral function...');
+      const tx = await contract.withdrawCollateral();
+      console.log('Transaction sent:', tx.hash);
+      
+      const receipt = await tx.wait();
+      console.log('Transaction confirmed:', receipt.hash);
+      
+      return receipt.hash;
+    } catch (error) {
+      console.error('Error withdrawing collateral:', error);
+      
+      // Provide more detailed error information
+      if (error instanceof Error) {
+        // Check for common error strings in the message
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('execution reverted')) {
+          console.error('Contract execution reverted. Possible reasons:');
+          console.error('1. Caller is not the borrower');
+          console.error('2. Loan is not in INITIALIZED state');
+          console.error('3. Insufficient collateral in rental contract');
+          console.error('4. Rental contract address is incorrect');
+        }
+        
+        throw new Error(`Failed to withdraw collateral: ${error.message}`);
+      }
+      
+      throw new Error('Failed to withdraw collateral from rental contract');
+    }
+  }
+  
+  /**
+   * Pay rent using the loan amount
+   * @param contractAddress The loan agreement contract address
+   * @returns The transaction hash
+   */
+  static async payRentUsingLoan(contractAddress: string): Promise<string> {
+    try {
+      const { signer } = this.getWalletConnection();
+      if (!signer) throw new Error('Wallet not connected');
+      
+      const contract = new ethers.Contract(contractAddress, LoanAgreementABI, signer);
+      
+      // Call payRent function
+      const tx = await contract.payRent();
+      const receipt = await tx.wait();
+      
+      return receipt.hash;
+    } catch (error) {
+      console.error('Error paying rent using loan:', error);
+      throw new Error('Failed to pay rent using the loan amount');
+    }
+  }
 } 

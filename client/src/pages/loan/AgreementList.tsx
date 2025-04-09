@@ -18,19 +18,43 @@ import {
   CheckCircle2,
   Banknote
 } from 'lucide-react';
+import { LoanApi } from '../../services/api.service';
 
+// Define types for loan agreement
 interface LoanAgreement {
-  id: string;
-  borrower: string;
-  lender: string;
-  loanAmount: string;
+  contractAddress: string;
+  borrower: {
+    id: string;
+    email: string;
+    walletAddress: string;
+  };
+  lender: {
+    id: string;
+    email: string;
+    walletAddress: string;
+  };
+  loanRequest: {
+    id: string;
+    rentalAgreement: {
+      id: string;
+      propertyAddress: string;
+    };
+  };
+  loanOffer: {
+    id: string;
+  };
+  amount: string;
   interestRate: number;
-  remainingBalance: string;
-  nextPaymentDue: Date | null;
-  nextPaymentAmount: string;
-  startDate: Date;
-  status: 'active' | 'paid' | 'defaulted';
-  propertyAddress: string;
+  duration: number;
+  graceMonths: number;
+  status: string;
+  startDate: string;
+  paymentsMade?: number;
+  totalPayments?: number;
+  nextPaymentDate?: string;
+  nextPaymentAmount?: string;
+  payments?: any[];
+  repaymentSchedule?: any[];
 }
 
 const LoanAgreementList: React.FC = () => {
@@ -46,87 +70,46 @@ const LoanAgreementList: React.FC = () => {
   
   useEffect(() => {
     const fetchAgreements = async () => {
+      if (!currentUser) {
+        setLoading(false);
+        setError('You must be logged in to view loan agreements');
+        return;
+      }
+
       try {
         setLoading(true);
+        // Convert Firebase user to User type
+        const userForApi = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
         
-        // In a real app, this would be fetched from the blockchain
-        // Mock data for demo purposes
-        const now = new Date();
-        const mockAgreements: LoanAgreement[] = [
-          {
-            id: '0x1234567890123456789012345678901234567890',
-            borrower: '0x9876543210987654321098765432109876543210',
-            lender: '0x1111111111111111111111111111111111111111',
-            loanAmount: '2.5',
-            interestRate: 5.5,
-            remainingBalance: '1.9413',
-            nextPaymentDue: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-            nextPaymentAmount: '0.2157',
-            startDate: new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
-            status: 'active',
-            propertyAddress: '123 Main St, New York, NY'
-          },
-          {
-            id: '0x2345678901234567890123456789012345678901',
-            borrower: '0x9876543210987654321098765432109876543210',
-            lender: '0x2222222222222222222222222222222222222222',
-            loanAmount: '5.0',
-            interestRate: 4.5,
-            remainingBalance: '4.3',
-            nextPaymentDue: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000),
-            nextPaymentAmount: '0.4306',
-            startDate: new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000),
-            status: 'active',
-            propertyAddress: '456 Park Ave, Boston, MA'
-          },
-          {
-            id: '0x3456789012345678901234567890123456789012',
-            borrower: '0x3333333333333333333333333333333333333333',
-            lender: '0x1111111111111111111111111111111111111111',
-            loanAmount: '1.5',
-            interestRate: 6.0,
-            remainingBalance: '0',
-            nextPaymentDue: null,
-            nextPaymentAmount: '0',
-            startDate: new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000),
-            status: 'paid',
-            propertyAddress: '789 Oak St, Chicago, IL'
-          },
-          {
-            id: '0x4567890123456789012345678901234567890123',
-            borrower: '0x4444444444444444444444444444444444444444',
-            lender: '0x1111111111111111111111111111111111111111',
-            loanAmount: '3.0',
-            interestRate: 5.0,
-            remainingBalance: '2.8',
-            nextPaymentDue: new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000),
-            nextPaymentAmount: '0.2583',
-            startDate: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
-            status: 'defaulted',
-            propertyAddress: '321 Pine St, San Francisco, CA'
-          }
-        ];
-        
-        setAgreements(mockAgreements);
-      } catch (err) {
-        console.error("Error fetching loan agreements:", err);
-        setError('Failed to load loan agreements');
-      } finally {
+        const response = await LoanApi.getLoanAgreements(userForApi);
+        setAgreements(response.loanAgreements || []);
+        setLoading(false);
+      } catch (err: any) {
+        console.error('Error fetching loan agreements:', err);
+        setError(err.message || 'Failed to load loan agreements');
         setLoading(false);
       }
     };
     
     fetchAgreements();
-  }, []);
+  }, [currentUser]);
   
-  // Format address for display (e.g. 0x1234...5678)
-  const formatAddress = (address: string) => {
+  // Format wallet address for display
+  const formatAddress = (address: string): string => {
+    if (!address) return 'N/A';
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
   
   // Format date for display
-  const formatDate = (date: Date | null): string => {
-    if (!date) return 'N/A';
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -135,11 +118,12 @@ const LoanAgreementList: React.FC = () => {
   };
   
   // Calculate days until next payment
-  const calculateDaysUntilPayment = (nextPaymentDue: Date | null): string => {
+  const calculateDaysUntilPayment = (nextPaymentDue: string | null | undefined): string => {
     if (!nextPaymentDue) return 'N/A';
     
     const now = new Date();
-    const diffTime = nextPaymentDue.getTime() - now.getTime();
+    const paymentDate = new Date(nextPaymentDue);
+    const diffTime = paymentDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays < 0) return 'Overdue';
@@ -148,14 +132,16 @@ const LoanAgreementList: React.FC = () => {
   };
   
   // Get status badge
-  const getStatusBadge = (status: LoanAgreement['status']) => {
+  const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'active':
+      case 'ACTIVE':
         return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Active</Badge>;
-      case 'paid':
+      case 'COMPLETED':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Paid</Badge>;
-      case 'defaulted':
+      case 'DEFAULTED':
         return <Badge className="bg-red-100 text-red-800 border-red-200">Defaulted</Badge>;
+      case 'PENDING':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Pending</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -163,10 +149,11 @@ const LoanAgreementList: React.FC = () => {
   
   // Check if an agreement is past due
   const isPastDue = (agreement: LoanAgreement): boolean => {
-    if (!agreement.nextPaymentDue) return false;
+    if (!agreement.nextPaymentDate) return false;
     
     const now = new Date();
-    return agreement.nextPaymentDue < now;
+    const nextPayment = new Date(agreement.nextPaymentDate);
+    return nextPayment < now;
   };
   
   // Filter agreements based on tab, search, and status filter
@@ -174,8 +161,8 @@ const LoanAgreementList: React.FC = () => {
     return agreements
       .filter(agreement => {
         // Filter by tab
-        if (activeTab === 'borrower' && currentUser?.uid !== agreement.borrower) return false;
-        if (activeTab === 'lender' && currentUser?.uid !== agreement.lender) return false;
+        if (activeTab === 'borrower' && currentUser?.uid !== agreement.borrower.id) return false;
+        if (activeTab === 'lender' && currentUser?.uid !== agreement.lender.id) return false;
         
         // Filter by status
         if (statusFilter !== 'all' && agreement.status !== statusFilter) return false;
@@ -184,9 +171,9 @@ const LoanAgreementList: React.FC = () => {
         if (searchQuery) {
           const query = searchQuery.toLowerCase();
           return (
-            agreement.id.toLowerCase().includes(query) ||
-            agreement.propertyAddress.toLowerCase().includes(query) ||
-            agreement.loanAmount.includes(query)
+            agreement.contractAddress.toLowerCase().includes(query) ||
+            (agreement.loanRequest.rentalAgreement.propertyAddress || '').toLowerCase().includes(query) ||
+            agreement.amount.includes(query)
           );
         }
         
@@ -197,8 +184,8 @@ const LoanAgreementList: React.FC = () => {
   const filteredAgreements = getFilteredAgreements();
   
   // Navigate to loan agreement detail
-  const handleViewAgreement = (id: string) => {
-    navigate(`/loan/agreement/${id}`);
+  const handleViewAgreement = (address: string) => {
+    navigate(`/loan/agreement/${address}`);
   };
   
   if (loading) {
@@ -275,9 +262,9 @@ const LoanAgreementList: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="defaulted">Defaulted</SelectItem>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="COMPLETED">Paid</SelectItem>
+                    <SelectItem value="DEFAULTED">Defaulted</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -298,23 +285,25 @@ const LoanAgreementList: React.FC = () => {
                 <div className="space-y-4">
                   {filteredAgreements.map((agreement) => (
                     <div 
-                      key={agreement.id}
+                      key={agreement.contractAddress}
                       className="rounded-lg border p-4 hover:border-primary cursor-pointer transition-colors"
-                      onClick={() => handleViewAgreement(agreement.id)}
+                      onClick={() => handleViewAgreement(agreement.contractAddress)}
                     >
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-medium truncate">{agreement.propertyAddress}</h3>
+                            <h3 className="font-medium truncate">
+                              {agreement.loanRequest.rentalAgreement.propertyAddress || 'Property Address Not Available'}
+                            </h3>
                             {getStatusBadge(agreement.status)}
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            ID: {formatAddress(agreement.id)} • Started: {formatDate(agreement.startDate)}
+                            Address: {formatAddress(agreement.contractAddress)} • Started: {formatDate(agreement.startDate)}
                           </p>
                         </div>
                         <div className="flex items-center justify-between md:justify-end gap-4">
                           <div className="text-right">
-                            <p className="font-medium">{agreement.loanAmount} ETH</p>
+                            <p className="font-medium">{agreement.amount} ETH</p>
                             <p className="text-sm text-muted-foreground">at {agreement.interestRate}% interest</p>
                           </div>
                           <Button variant="ghost" size="icon">
@@ -329,26 +318,26 @@ const LoanAgreementList: React.FC = () => {
                         <div>
                           <p className="text-sm text-muted-foreground">Role</p>
                           <p className="font-medium">
-                            {currentUser?.uid === agreement.borrower ? 'Borrower' : 'Lender'}
+                            {currentUser?.uid === agreement.borrower.id ? 'Borrower' : 'Lender'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                          <p className="text-sm text-muted-foreground">Payment Progress</p>
                           <p className="font-medium">
-                            {agreement.status === 'paid' ? (
+                            {agreement.status === 'COMPLETED' ? (
                               <span className="flex items-center text-green-600">
                                 <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Fully Paid
                               </span>
                             ) : (
-                              `${agreement.remainingBalance} ETH`
+                              `${agreement.paymentsMade || 0}/${agreement.totalPayments || agreement.duration} payments`
                             )}
                           </p>
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">Next Payment</p>
                           <p className={`font-medium ${isPastDue(agreement) ? 'text-red-600' : ''}`}>
-                            {agreement.status === 'active' 
-                              ? `${calculateDaysUntilPayment(agreement.nextPaymentDue)} (${agreement.nextPaymentAmount} ETH)`
+                            {agreement.status === 'ACTIVE' 
+                              ? `${calculateDaysUntilPayment(agreement.nextPaymentDate)} (${agreement.nextPaymentAmount || 'N/A'} ETH)`
                               : 'N/A'}
                           </p>
                         </div>

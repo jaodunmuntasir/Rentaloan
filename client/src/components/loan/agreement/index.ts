@@ -7,7 +7,6 @@ export { default as LoanTermsDetailCard } from './LoanTermsDetailCard';
 export { default as LoanSummaryCard } from './LoanSummaryCard';
 export { default as ProgressBar } from './ProgressBar';
 export { default as PaymentScheduleTab } from './PaymentScheduleTab';
-export { default as MakePaymentTab } from './MakePaymentTab';
 export { default as FundLoanTab } from './FundLoanTab';
 export { default as TestFunctionsTab } from './TestFunctionsTab';
 export { default as LoadingState } from './LoadingState';

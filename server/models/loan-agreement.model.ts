@@ -1,8 +1,9 @@
-import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
+import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasMany } from 'sequelize-typescript';
 import { User } from './user.model';
 import { LoanRequest } from './loan-request.model';
 import { LoanOffer } from './loan-offer.model';
 import { RentalAgreement } from './rental-agreement.model';
+import { Payment } from './payment.model';
 
 /**
  * Status values match the blockchain contract Status enum:
@@ -111,6 +112,7 @@ export class LoanAgreement extends Model {
   })
   startDate!: Date;
 
-  // The remainingBalance field doesn't exist in the actual database table
-  // Removing it to match the actual schema
+  // Add relationship to payments
+  @HasMany(() => Payment)
+  payments!: Payment[];
 } 

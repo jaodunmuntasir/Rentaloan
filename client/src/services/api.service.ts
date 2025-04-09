@@ -450,36 +450,32 @@ export const LoanApi = {
     }
   },
   
-  // Initialize a loan (for lender)
+  // Initialize a loan agreement (record client-side blockchain transaction)
   initializeLoan: async (user: AppUser, contractAddress: string, transactionHash: string) => {
     try {
       const response = await api.post(
-        `/api/loan/agreement/${contractAddress}/initialize`, 
-        { transactionHash }, 
+        `/api/loan/agreement/${contractAddress}/initialize`,
+        { transactionHash },
         getAuthHeader(user)
       );
       return response.data;
     } catch (error) {
-      console.error('Error initializing loan:', error);
+      console.error('Error recording loan initialization:', error);
       throw error;
     }
   },
   
-  // Make a loan repayment (for borrower)
-  makeRepayment: async (user: AppUser, contractAddress: string, month: number, amount: string, transactionHash: string) => {
+  // Make a repayment on a loan agreement (record client-side blockchain transaction)
+  makeRepayment: async (user: AppUser, contractAddress: string, month: number, amount: string, transactionHash: string, isComplete: boolean = false) => {
     try {
       const response = await api.post(
-        `/api/loan/agreement/${contractAddress}/repay`, 
-        { 
-          month, 
-          amount, 
-          transactionHash 
-        }, 
+        `/api/loan/agreement/${contractAddress}/repay`,
+        { month, amount, transactionHash, isComplete },
         getAuthHeader(user)
       );
       return response.data;
     } catch (error) {
-      console.error('Error making loan repayment:', error);
+      console.error('Error recording loan repayment:', error);
       throw error;
     }
   },

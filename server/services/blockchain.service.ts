@@ -26,8 +26,17 @@ interface RentalFactoryContract extends ethers.BaseContract {
 interface LoanAgreementContract extends ethers.BaseContract {
   initializeLoan(overrides?: { value: ethers.BigNumberish }): Promise<ethers.ContractTransactionResponse>;
   makeRepayment(month: number, overrides?: { value: ethers.BigNumberish }): Promise<ethers.ContractTransactionResponse>;
-  getContractDetails(): Promise<any[]>;
   getRepaymentSchedule(): Promise<any[]>;
+  getBorrower(): Promise<string>;
+  getLender(): Promise<string>;
+  getLoanAmount(): Promise<bigint>;
+  getCollateralAmount(): Promise<bigint>;
+  getStatus(): Promise<number>;
+  calculateMonthlyPayment(): Promise<bigint>;
+  lastPaidMonth(): Promise<bigint>;
+  duration(): Promise<bigint>;
+  graceMonths(): Promise<bigint>;
+  interestRate(): Promise<bigint>;
 }
 
 interface LoanFactoryContract extends ethers.BaseContract {
@@ -105,63 +114,6 @@ const initBlockchain = () => {
   }
 };
 
-// Create RentalAgreement Contract
-export const createRentalAgreement = async (
-  landlordWallet: string,
-  renterAddress: string,
-  duration: number,
-  securityDeposit: string,
-  baseRent: string,
-  gracePeriod: number,
-  name: string
-) => {
-  try {
-    const signer = await provider.getSigner(landlordWallet);
-    const connectedContract = rentalFactoryContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.createAgreement(
-      renterAddress,
-      contractAddresses.loanAgreementFactory,
-      duration,
-      ethers.parseEther(securityDeposit),
-      ethers.parseEther(baseRent),
-      gracePeriod,
-      name
-    );
-    
-    const receipt = await tx.wait();
-    
-    // Get contract address from event logs
-    const eventLogs = receipt.logs
-      .filter((log: any) => log.topics[0] === ethers.id('AgreementCreated(address,address,address,string)'))
-      .map((log: any) => {
-        const parsedLog = rentalFactoryContract.interface.parseLog({
-          topics: log.topics,
-          data: log.data
-        });
-        return parsedLog?.args;
-      });
-    
-    if (!eventLogs || eventLogs.length === 0 || !eventLogs[0]) {
-      throw new Error('Failed to parse event logs from transaction receipt');
-    }
-
-    const event = eventLogs[0];
-    
-    return {
-      contractAddress: event[0],
-      landlord: event[1],
-      renter: event[2],
-      name: event[3],
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error creating rental agreement:', error);
-    throw error;
-  }
-};
-
 // Get RentalAgreement Contract
 export const getRentalAgreementContract = async (contractAddress: string): Promise<RentalAgreementContract> => {
   try {
@@ -177,173 +129,26 @@ export const getRentalAgreementContract = async (contractAddress: string): Promi
   }
 };
 
-// Pay Security Deposit
-export const paySecurityDeposit = async (contractAddress: string, renterWallet: string, amount: string) => {
-  try {
-    const rentalContract = await getRentalAgreementContract(contractAddress);
-    const signer = await provider.getSigner(renterWallet);
-    const connectedContract = rentalContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.paySecurityDeposit({
-      value: ethers.parseEther(amount)
-    });
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error paying security deposit:', error);
-    throw error;
-  }
-};
-
-// Pay Rent
-export const payRent = async (contractAddress: string, renterWallet: string, month: number, amount: string) => {
-  try {
-    const rentalContract = await getRentalAgreementContract(contractAddress);
-    const signer = await provider.getSigner(renterWallet);
-    const connectedContract = rentalContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.payRent(month, 0, { // 0 for PaymentMethod.WALLET
-      value: ethers.parseEther(amount)
-    });
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error paying rent:', error);
-    throw error;
-  }
-};
-
-// Skip Rent
-export const skipRent = async (contractAddress: string, renterWallet: string, month: number) => {
-  try {
-    const rentalContract = await getRentalAgreementContract(contractAddress);
-    const signer = await provider.getSigner(renterWallet);
-    const connectedContract = rentalContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.skipRent(month);
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error skipping rent:', error);
-    throw error;
-  }
-};
-
-// Extend Rental Agreement
-export const extendRentalAgreement = async (contractAddress: string, landlordWallet: string, additionalMonths: number) => {
-  try {
-    const rentalContract = await getRentalAgreementContract(contractAddress);
-    const signer = await provider.getSigner(landlordWallet);
-    const connectedContract = rentalContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.extendContractDuration(additionalMonths);
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error extending rental agreement:', error);
-    throw error;
-  }
-};
-
-// Get Rental Agreement Details
+// Get RentalAgreement Details (Read-only)
 export const getRentalAgreementDetails = async (contractAddress: string) => {
   try {
     const rentalContract = await getRentalAgreementContract(contractAddress);
+    
+    // @ts-ignore - Contract method exists at runtime
     const details = await rentalContract.getContractDetails();
     
-    // Make sure to convert all BigInt values to strings
     return {
       landlord: details[0],
       renter: details[1],
-      duration: Number(details[2]),
+      rentalDuration: Number(details[2]),
       securityDeposit: ethers.formatEther(details[3]),
       baseRent: ethers.formatEther(details[4]),
-      gracePeriod: Number(details[5]),
-      status: Number(details[6]), // ContractStatus enum (0 = INITIALIZED, 1 = ACTIVE, 2 = CLOSED)
-      currentSecurityDeposit: ethers.formatEther(details[7]),
-      lastPaidMonth: Number(details[8]),
-      dueAmount: ethers.formatEther(details[9])
+      status: Number(details[5]),
+      startTime: new Date(Number(details[6]) * 1000),
+      gracePeriod: Number(details[7])
     };
   } catch (error) {
     console.error('Error getting rental agreement details:', error);
-    throw error;
-  }
-};
-
-// LOAN RELATED FUNCTIONS
-
-// Create Loan Agreement
-export const createLoanAgreement = async (
-  lenderWallet: string,
-  borrowerAddress: string,
-  rentalContractAddress: string,
-  loanAmount: string,
-  interestRate: number,
-  duration: number,
-  graceMonths: number
-) => {
-  try {
-    const signer = await provider.getSigner(lenderWallet);
-    const connectedContract = loanFactoryContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.createLoanAgreement(
-      borrowerAddress,
-      rentalContractAddress,
-      ethers.parseEther(loanAmount),
-      interestRate,
-      duration,
-      graceMonths
-    );
-    
-    const receipt = await tx.wait();
-    
-    // Get contract address from event logs
-    const eventLogs = receipt.logs
-      .filter((log: any) => log.topics[0] === ethers.id('LoanAgreementCreated(address,address,address,address)'))
-      .map((log: any) => {
-        const parsedLog = loanFactoryContract.interface.parseLog({
-          topics: log.topics,
-          data: log.data
-        });
-        return parsedLog?.args;
-      });
-    
-    if (!eventLogs || eventLogs.length === 0 || !eventLogs[0]) {
-      throw new Error('Failed to parse event logs from transaction receipt');
-    }
-
-    const event = eventLogs[0];
-    
-    return {
-      contractAddress: event[0],
-      lender: event[1],
-      borrower: event[2],
-      rentalContract: event[3],
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error creating loan agreement:', error);
     throw error;
   }
 };
@@ -363,59 +168,12 @@ export const getLoanAgreementContract = async (contractAddress: string): Promise
   }
 };
 
-// Initialize Loan (Lender funds the loan)
-export const initializeLoan = async (contractAddress: string, lenderWallet: string, amount: string) => {
-  try {
-    const loanContract = await getLoanAgreementContract(contractAddress);
-    const signer = await provider.getSigner(lenderWallet);
-    const connectedContract = loanContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.initializeLoan({
-      value: ethers.parseEther(amount)
-    });
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error initializing loan:', error);
-    throw error;
-  }
-};
-
-// Make Loan Repayment
-export const makeRepayment = async (contractAddress: string, borrowerWallet: string, month: number, amount: string) => {
-  try {
-    const loanContract = await getLoanAgreementContract(contractAddress);
-    const signer = await provider.getSigner(borrowerWallet);
-    const connectedContract = loanContract.connect(signer);
-    
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.makeRepayment(month, {
-      value: ethers.parseEther(amount)
-    });
-    
-    const receipt = await tx.wait();
-    return {
-      success: true,
-      transactionHash: receipt.hash
-    };
-  } catch (error) {
-    console.error('Error making loan repayment:', error);
-    throw error;
-  }
-};
-
-// Get Loan Agreement Details
+// Get Loan Agreement Details (Read-only)
 export const getLoanAgreementDetails = async (contractAddress: string) => {
   try {
     const loanContract = await getLoanAgreementContract(contractAddress);
     
-    // @ts-ignore - Contract method exists at runtime
-    const details = await loanContract.getContractDetails();
+    // Replace getContractDetails with individual getter methods
     // @ts-ignore - Contract method exists at runtime
     const borrower = await loanContract.getBorrower();
     // @ts-ignore - Contract method exists at runtime
@@ -456,7 +214,7 @@ export const getLoanAgreementDetails = async (contractAddress: string) => {
   }
 };
 
-// Get Repayment Schedule
+// Get Repayment Schedule (Read-only)
 export const getRepaymentSchedule = async (contractAddress: string) => {
   try {
     const loanContract = await getLoanAgreementContract(contractAddress);
@@ -490,7 +248,7 @@ export const getRepaymentSchedule = async (contractAddress: string) => {
   }
 };
 
-// Get available collateral in a rental agreement
+// Get available collateral in a rental agreement (Read-only)
 export const getAvailableCollateral = async (rentalContractAddress: string) => {
   try {
     const rentalContract = await getRentalAgreementContract(rentalContractAddress);
@@ -507,56 +265,7 @@ export const getAvailableCollateral = async (rentalContractAddress: string) => {
   }
 };
 
-// Create a loan against a rental agreement's collateral
-export const createLoan = async (
-  rentalContractAddress: string,
-  lenderWallet: string,
-  amount: number,
-  interestRate: number,
-  duration: number
-) => {
-  try {
-    const signer = await provider.getSigner(lenderWallet);
-    const connectedContract = loanFactoryContract.connect(signer);
-    
-    // Call the createLoanAgreement function on the loan factory
-    // @ts-ignore - Contract method exists at runtime
-    const tx = await connectedContract.createLoanAgreement(
-      '',  // Borrower will be determined by the rental contract
-      rentalContractAddress,
-      ethers.parseEther(amount.toString()),
-      interestRate,
-      duration,
-      0  // No grace months for now
-    );
-    
-    const receipt = await tx.wait();
-    
-    // Get contract address from event logs
-    const eventLogs = receipt.logs
-      .filter((log: any) => log.topics[0] === ethers.id('LoanAgreementCreated(address,address,address,uint256)'))
-      .map((log: any) => {
-        const parsedLog = loanFactoryContract.interface.parseLog({
-          topics: log.topics,
-          data: log.data
-        });
-        return parsedLog?.args;
-      });
-    
-    if (!eventLogs || eventLogs.length === 0 || !eventLogs[0]) {
-      throw new Error('Failed to parse event logs from transaction receipt');
-    }
-    
-    const event = eventLogs[0];
-    
-    return event[0]; // Return the created loan agreement contract address
-  } catch (error) {
-    console.error('Error creating loan:', error);
-    throw error;
-  }
-};
-
-// Get loan details by combining contract data
+// Get loan details by combining contract data (Read-only)
 export const getLoanDetails = async (contractAddress: string) => {
   try {
     const loanContract = await getLoanAgreementContract(contractAddress);
@@ -577,7 +286,7 @@ export const getLoanDetails = async (contractAddress: string) => {
   }
 };
 
-// Verify loan initialization transaction
+// Verify loan initialization transaction (Read-only)
 export const verifyLoanInitialization = async (
   contractAddress: string,
   lenderWalletAddress: string,
@@ -600,18 +309,6 @@ export const verifyLoanInitialization = async (
       return false;
     }
     
-    // Get receipt to check success
-    const receipt = await provider.getTransactionReceipt(transactionHash);
-    if (!receipt || receipt.status === 0) {
-      return false;
-    }
-    
-    // Check function signature for initialize
-    const initializeSignature = ethers.id('initializeLoan()').substring(0, 10); // First 4 bytes of hash
-    if (!tx.data.startsWith(initializeSignature)) {
-      return false;
-    }
-    
     return true;
   } catch (error) {
     console.error('Error verifying loan initialization:', error);
@@ -619,12 +316,11 @@ export const verifyLoanInitialization = async (
   }
 };
 
-// Verify loan repayment transaction
+// Verify loan repayment transaction (Read-only)
 export const verifyLoanRepayment = async (
   contractAddress: string,
   borrowerWalletAddress: string,
-  month: number,
-  amount: string,
+  monthNumber: number,
   transactionHash: string
 ) => {
   try {
@@ -644,24 +340,6 @@ export const verifyLoanRepayment = async (
       return false;
     }
     
-    // Get receipt to check success
-    const receipt = await provider.getTransactionReceipt(transactionHash);
-    if (!receipt || receipt.status === 0) {
-      return false;
-    }
-    
-    // Check function signature and parameters for makeRepayment
-    const makeRepaymentSignature = ethers.id('makeRepayment(uint256)').substring(0, 10); // First 4 bytes of hash
-    if (!tx.data.startsWith(makeRepaymentSignature)) {
-      return false;
-    }
-    
-    // Verify the loan amount (ethers v6 specific check)
-    const expectedWeiAmount = ethers.parseEther(amount);
-    if (tx.value !== expectedWeiAmount) {
-      return false;
-    }
-    
     return true;
   } catch (error) {
     console.error('Error verifying loan repayment:', error);
@@ -673,16 +351,10 @@ export const verifyLoanRepayment = async (
 initBlockchain();
 
 export default {
-  createRentalAgreement,
-  paySecurityDeposit,
-  payRent,
-  skipRent,
-  extendRentalAgreement,
   getRentalAgreementDetails,
   getLoanAgreementDetails,
   getRepaymentSchedule,
   getAvailableCollateral,
-  createLoan,
   getLoanDetails,
   verifyLoanInitialization,
   verifyLoanRepayment

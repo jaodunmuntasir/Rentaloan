@@ -5,19 +5,22 @@ import { useToast } from '../../contexts/ToastContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { BlockchainService, LoanAgreementStatus } from '../../services/blockchain.service';
 import { useAuth } from '../../contexts/AuthContext';
+import { useWallet } from '../../contexts/WalletContext';
 import { LoanApi } from '../../services/api.service';
 import { User } from '../../types/user.types';
 import { 
   AgreementHeader,
   LoanSummaryCard,
   PaymentScheduleTab,
-  MakePaymentTab,
   FundLoanTab,
   TestFunctionsTab,
   LoadingState,
   ErrorState,
   PaymentStatusBadge
 } from '../../components/loan/agreement';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { WalletIcon } from 'lucide-react';
 
 // Types
 interface Payment {
@@ -67,6 +70,7 @@ const LoanAgreementDetail: React.FC = () => {
   const { address } = useParams<{ address: string }>();
   const { showToast } = useToast();
   const { currentUser } = useAuth();
+  const { isConnected, connectWallet, walletAddress } = useWallet();
   
   // State variables
   const [dbAgreement, setDbAgreement] = useState<LoanAgreementData | null>(null);
@@ -75,6 +79,7 @@ const LoanAgreementDetail: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contractPaymentStatus, setContractPaymentStatus] = useState<PaymentStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [connectingWallet, setConnectingWallet] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [processingAction, setProcessingAction] = useState<string | null>(null);
@@ -110,8 +115,11 @@ const LoanAgreementDetail: React.FC = () => {
     let isMounted = true;
     
     try {
+      console.log('Fetching blockchain data for address:', address);
+      
       // Fetch blockchain data
       const blockchainData = await BlockchainService.getLoanAgreementDetails(address);
+      console.log('Blockchain data fetched:', blockchainData);
       
       // Check if component is still mounted before updating state
       if (!isMounted) return null;
@@ -120,6 +128,7 @@ const LoanAgreementDetail: React.FC = () => {
       
       // Check if status has changed and update server if needed
       if (lastKnownStatus !== null && lastKnownStatus !== blockchainData.status) {
+        console.log('Status changed from', lastKnownStatus, 'to', blockchainData.status);
         await updateServerStatus(blockchainData.status);
       }
       
@@ -128,6 +137,7 @@ const LoanAgreementDetail: React.FC = () => {
       
       // Get rental contract address
       const rentalAddress = await BlockchainService.getRentalContractAddress(address);
+      console.log('Rental contract address:', rentalAddress);
       
       if (!isMounted) return null;
       setRentalContractAddress(rentalAddress);
@@ -200,9 +210,14 @@ const LoanAgreementDetail: React.FC = () => {
       try {
         setLoading(true);
         
-        // First try to get blockchain data directly
-        const blockchainData = await fetchBlockchainData();
+        // Check if wallet is properly connected
+        console.log('Wallet connection check:', {
+          isConnected,
+          currentWalletAddress: walletAddress,
+          currentUser: currentUser?.uid
+        });
         
+        // First try to get database data
         // Convert Firebase user to User type
         const userForApi: User = {
           id: currentUser.uid,
@@ -229,22 +244,36 @@ const LoanAgreementDetail: React.FC = () => {
           
           setDbAgreement(dbData);
           
-          // Update payments with transaction hash info from API
-          if (payments.length > 0 && apiPayments.length > 0) {
-            const updatedPayments = [...payments];
-            
-            apiPayments.forEach((apiPayment: any) => {
-              const paymentIndex = updatedPayments.findIndex(p => p.monthNumber === apiPayment.month);
-              if (paymentIndex !== -1) {
-                updatedPayments[paymentIndex].txHash = apiPayment.txHash;
+          // Now try to get blockchain data if wallet is connected
+          if (isConnected) {
+            try {
+              const blockchainData = await fetchBlockchainData();
+              
+              // Update payments with transaction hash info from API
+              if (payments.length > 0 && apiPayments.length > 0) {
+                const updatedPayments = [...payments];
+                
+                apiPayments.forEach((apiPayment: any) => {
+                  const paymentIndex = updatedPayments.findIndex(p => p.monthNumber === apiPayment.month);
+                  if (paymentIndex !== -1) {
+                    updatedPayments[paymentIndex].txHash = apiPayment.txHash;
+                  }
+                });
+                
+                setPayments(updatedPayments);
               }
-            });
-            
-            setPayments(updatedPayments);
+            } catch (blockchainError) {
+              console.error('Error fetching blockchain data:', blockchainError);
+              // Continue with database data even if blockchain data fails
+              showToast('Could not fetch blockchain data. Some features may be limited.', 'warning');
+            }
+          } else {
+            console.log('Wallet not connected, skipping blockchain data fetch');
           }
         } catch (apiError) {
           console.error('Error fetching loan agreement from API:', apiError);
           showToast('Could not fetch agreement details from server', 'warning');
+          setError('Failed to load loan agreement details from the server.');
         }
         
         setLoading(false);
@@ -257,15 +286,18 @@ const LoanAgreementDetail: React.FC = () => {
     
     fetchInitialData();
     
-    // Poll for blockchain updates every 15 seconds
-    const intervalId = setInterval(() => {
-      if (currentUser) {  // Only fetch if user is logged in
+    // Poll for blockchain updates every 15 seconds, but only if wallet is connected
+    let intervalId: NodeJS.Timeout;
+    if (isConnected && currentUser) {
+      intervalId = setInterval(() => {
         fetchBlockchainData().catch(console.error);
-      }
-    }, 15000);
+      }, 15000);
+    }
     
-    return () => clearInterval(intervalId);
-  }, [address, currentUser]); // Remove showToast from dependencies to prevent potential rerenders
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [address, currentUser, isConnected]); // Add isConnected as a dependency
   
   // Utility functions
   // Calculate repayment progress based on last paid month and total duration
@@ -313,30 +345,48 @@ const LoanAgreementDetail: React.FC = () => {
 
   // Check if current user is the borrower
   const isUserBorrower = (): boolean => {
-    if (!currentUser || !dbAgreement || !dbAgreement.borrower) return false;
+    if (!currentUser || !walletAddress) return false;
     
-    // Check wallet address if available in blockchain data
+    // First check blockchain data
     if (blockchainAgreement?.borrower) {
-      const userWalletAddress = (currentUser as any).walletAddress?.toLowerCase();
-      return userWalletAddress === blockchainAgreement.borrower.toLowerCase();
+      console.log('Checking if user is borrower:', { 
+        userWalletAddress: walletAddress.toLowerCase(), 
+        contractBorrower: blockchainAgreement.borrower.toLowerCase(),
+        match: walletAddress.toLowerCase() === blockchainAgreement.borrower.toLowerCase()
+      });
+      
+      return walletAddress.toLowerCase() === blockchainAgreement.borrower.toLowerCase();
     }
     
-    // Fallback to database ID check
-    return (currentUser as any).id === dbAgreement.borrower.id;
+    // Fallback to database ID check only if no blockchain data
+    if (dbAgreement?.borrower) {
+      return currentUser.uid === dbAgreement.borrower.id;
+    }
+    
+    return false;
   };
 
   // Check if current user is the lender
   const isUserLender = (): boolean => {
-    if (!currentUser || !dbAgreement || !dbAgreement.lender) return false;
+    if (!currentUser || !walletAddress) return false;
     
-    // Check wallet address if available in blockchain data
+    // First check blockchain data
     if (blockchainAgreement?.lender) {
-      const userWalletAddress = (currentUser as any).walletAddress?.toLowerCase();
-      return userWalletAddress === blockchainAgreement.lender.toLowerCase();
+      console.log('Checking if user is lender:', { 
+        userWalletAddress: walletAddress.toLowerCase(), 
+        contractLender: blockchainAgreement.lender.toLowerCase(),
+        match: walletAddress.toLowerCase() === blockchainAgreement.lender.toLowerCase()
+      });
+      
+      return walletAddress.toLowerCase() === blockchainAgreement.lender.toLowerCase();
     }
     
-    // Fallback to database ID check
-    return (currentUser as any).id === dbAgreement.lender.id;
+    // Fallback to database ID check only if no blockchain data
+    if (dbAgreement?.lender) {
+      return currentUser.uid === dbAgreement.lender.id;
+    }
+    
+    return false;
   };
 
   // Action handlers
@@ -349,6 +399,8 @@ const LoanAgreementDetail: React.FC = () => {
     
     try {
       setProcessingAction('payment');
+      
+      // 1. Execute the blockchain transaction directly from client
       const txHash = await BlockchainService.makeRepayment(
         address,
         month,
@@ -357,24 +409,44 @@ const LoanAgreementDetail: React.FC = () => {
       
       showToast(`Payment successful! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Update blockchain data instead of reloading
-      await fetchBlockchainData();
+      // 2. Check if this was the final payment
+      let isComplete = false;
+      try {
+        // Get latest status first
+        await fetchBlockchainData();
+        if (blockchainAgreement && month === blockchainAgreement.duration) {
+          isComplete = true;
+        }
+      } catch (err) {
+        console.error('Error checking payment status:', err);
+      }
       
-      // Also record the payment in the database
+      // 3. Record the payment in the database
       try {
         // Convert Firebase user to User type
         const userForApi: User = {
-        id: currentUser.uid,
-        email: currentUser.email || '',
-        name: currentUser.displayName || '',
-        walletAddress: null,
-        token: await currentUser.getIdToken()
-      };
-        await LoanApi.recordPayment(userForApi, address, month, amount, txHash);
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+        
+        await LoanApi.makeRepayment(
+          userForApi, 
+          address, 
+          month, 
+          amount, 
+          txHash, 
+          isComplete
+        );
       } catch (dbErr) {
         console.error('Error recording payment in database:', dbErr);
-        // Continue even if this fails - blockchain is source of truth
+        showToast('Payment confirmed on blockchain but recording in database failed.', 'warning');
       }
+      
+      // 4. Update blockchain data 
+      await fetchBlockchainData();
       
     } catch (err) {
       console.error('Payment error:', err);
@@ -386,13 +458,15 @@ const LoanAgreementDetail: React.FC = () => {
 
   // Handle funding the loan
   const handleFundLoan = async () => {
-    if (!address || !blockchainAgreement) {
-      showToast("Contract details not found", "error");
+    if (!address || !blockchainAgreement || !currentUser) {
+      showToast("Contract details not found or user not authenticated", "error");
       return;
     }
     
     try {
       setProcessingAction('fundLoan');
+      
+      // 1. Execute the blockchain transaction directly from client
       const txHash = await BlockchainService.fundLoan(
         address,
         blockchainAgreement.loanAmount
@@ -400,7 +474,25 @@ const LoanAgreementDetail: React.FC = () => {
       
       showToast(`Loan funded successfully! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Update blockchain data instead of reloading
+      // 2. Record the transaction in the database
+      try {
+        // Convert Firebase user to User type
+        const userForApi: User = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+        
+        // Record the transaction with the server
+        await LoanApi.initializeLoan(userForApi, address, txHash);
+      } catch (dbError) {
+        console.error('Error recording transaction in database:', dbError);
+        showToast('Transaction successful but database recording failed. Please refresh.', 'warning');
+      }
+      
+      // 3. Update blockchain data
       await fetchBlockchainData();
       
     } catch (err) {
@@ -411,22 +503,90 @@ const LoanAgreementDetail: React.FC = () => {
     }
   };
   
-  // Handle simulating a default (for testing)
-  const handleSimulateDefault = async () => {
+  // Handle withdrawing collateral from rental contract
+  const handleWithdrawCollateral = async () => {
     if (!address) {
       showToast("Contract address not found", "error");
       return;
     }
     
     try {
+      setProcessingAction('withdrawCollateral');
+      const txHash = await BlockchainService.withdrawCollateral(address);
+      
+      showToast(`Collateral withdrawn successfully! Transaction hash: ${formatAddress(txHash)}`, "success");
+      
+      // Update blockchain data 
+      await fetchBlockchainData();
+      
+    } catch (err) {
+      console.error('Collateral withdrawal error:', err);
+      showToast(err instanceof Error ? err.message : "Unknown error occurred", "error");
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+  
+  // Handle paying rent using loan
+  const handlePayRentUsingLoan = async () => {
+    if (!address) {
+      showToast("Contract address not found", "error");
+      return;
+    }
+    
+    try {
+      setProcessingAction('payRentUsingLoan');
+      const txHash = await BlockchainService.payRentUsingLoan(address);
+      
+      showToast(`Rent paid using loan successfully! Transaction hash: ${formatAddress(txHash)}`, "success");
+      
+      // Update blockchain data 
+      await fetchBlockchainData();
+      
+    } catch (err) {
+      console.error('Pay rent error:', err);
+      showToast(err instanceof Error ? err.message : "Unknown error occurred", "error");
+    } finally {
+      setProcessingAction(null);
+    }
+  };
+  
+  // Handle simulating a default (for testing)
+  const handleSimulateDefault = async () => {
+    if (!address || !currentUser) {
+      showToast("Contract address not found or user not authenticated", "error");
+      return;
+    }
+    
+    try {
       setProcessingAction('simulateDefault');
+      
+      // 1. Execute the blockchain transaction directly from client
       const txHash = await BlockchainService.simulateDefault(
         address
       );
       
       showToast(`Default simulated! Transaction hash: ${formatAddress(txHash)}`, "success");
       
-      // Update blockchain data instead of reloading
+      // 2. Update loan status in server database
+      try {
+        // Convert Firebase user to User type
+        const userForApi: User = {
+          id: currentUser.uid,
+          email: currentUser.email || '',
+          name: currentUser.displayName || '',
+          walletAddress: null,
+          token: await currentUser.getIdToken()
+        };
+        
+        // Update status to DEFAULTED
+        await LoanApi.updateLoanStatus(userForApi, address, LoanAgreementStatus.DEFAULTED);
+      } catch (dbErr) {
+        console.error('Error updating loan status in database:', dbErr);
+        showToast('Default confirmed on blockchain but database update failed.', 'warning');
+      }
+      
+      // 3. Update blockchain data
       await fetchBlockchainData();
       
     } catch (err) {
@@ -437,9 +597,89 @@ const LoanAgreementDetail: React.FC = () => {
     }
   };
 
+  // Handle wallet connection
+  const handleConnectWallet = async () => {
+    setConnectingWallet(true);
+    try {
+      const connected = await connectWallet();
+      if (connected) {
+        showToast('Wallet connected successfully', 'success');
+        // Try to fetch blockchain data now that we're connected
+        await fetchBlockchainData();
+      } else {
+        showToast('Failed to connect wallet', 'error');
+      }
+    } catch (error) {
+      console.error('Error connecting wallet:', error);
+      showToast('Error connecting wallet', 'error');
+    } finally {
+      setConnectingWallet(false);
+    }
+  };
+
+  // Switch to test tab automatically when important operations are needed
+  useEffect(() => {
+    if (!blockchainAgreement) return;
+    
+    // Don't recompute tab selection if we've already chosen a tab for this status
+    const currentStatus = blockchainAgreement.status;
+    
+    // Store these values to avoid recalculation
+    const isBorrower = walletAddress?.toLowerCase() === blockchainAgreement.borrower?.toLowerCase();
+    const isLender = walletAddress?.toLowerCase() === blockchainAgreement.lender?.toLowerCase();
+    
+    console.log('Status and roles for tab selection:', {
+      status: currentStatus,
+      isBorrower,
+      isLender
+    });
+    
+    // Consider user roles and loan status to determine appropriate tab
+    if (currentStatus === LoanAgreementStatus.INITIALIZED && isBorrower) {
+      console.log('Setting tab to test for borrower to withdraw collateral');
+      setActiveTab('test'); // Show test tab for collateral withdrawal
+    } else if (currentStatus === LoanAgreementStatus.READY && isBorrower) {
+      console.log('Setting tab to test for borrower to pay rent using loan');
+      setActiveTab('test'); // Show test tab for paying rent
+    } else if (currentStatus === LoanAgreementStatus.READY && isLender) {
+      console.log('Setting tab to fund for lender');
+      setActiveTab('fund'); // Show fund tab for lender
+    } else if (currentStatus === LoanAgreementStatus.PAID && isBorrower) {
+      console.log('Setting tab to schedule for borrower repayments');
+      setActiveTab('schedule'); // Show payment schedule for repayments
+    } else if (currentStatus === LoanAgreementStatus.PAID && isLender) {
+      console.log('Setting tab to schedule for lender to monitor payments');
+      setActiveTab('schedule'); // Show payment schedule for lender to monitor payments
+    }
+  }, [blockchainAgreement, walletAddress]);
+
   // If loading, show loading state
   if (loading) {
     return <LoadingState />;
+  }
+
+  // If no wallet connection, show connect wallet prompt
+  if (!isConnected && !loading) {
+    return (
+      <Card className="mx-auto max-w-md mt-8">
+        <CardHeader>
+          <CardTitle>Wallet Connection Required</CardTitle>
+          <CardDescription>
+            Connect your wallet to interact with the loan agreement contract
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex justify-center pb-6">
+          <Button 
+            onClick={handleConnectWallet}
+            disabled={connectingWallet}
+            size="lg"
+          >
+            <WalletIcon className="mr-2" />
+            {connectingWallet ? 'Connecting...' : 'Connect Wallet'}
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   // If error, show error state
@@ -457,7 +697,13 @@ const LoanAgreementDetail: React.FC = () => {
     interestRate: blockchainAgreement?.interestRate || dbAgreement?.interestRate || 0,
     duration: blockchainAgreement?.duration || dbAgreement?.duration || 0,
     installmentAmount: blockchainAgreement?.monthlyPayment || '0',
-    status: blockchainAgreement?.status || dbAgreement?.status || 'UNKNOWN',
+    status: blockchainAgreement?.status !== undefined ? blockchainAgreement.status : 
+           (dbAgreement?.status === 'CREATED' || dbAgreement?.status === 'INITIALIZED' ? LoanAgreementStatus.INITIALIZED :
+            dbAgreement?.status === 'READY' ? LoanAgreementStatus.READY :
+            dbAgreement?.status === 'ACTIVE' ? LoanAgreementStatus.ACTIVE :
+            dbAgreement?.status === 'PAID' ? LoanAgreementStatus.PAID :
+            dbAgreement?.status === 'COMPLETED' ? LoanAgreementStatus.COMPLETED :
+            dbAgreement?.status === 'DEFAULTED' ? LoanAgreementStatus.DEFAULTED : 0),
     startDate: dbAgreement?.startDate ? new Date(dbAgreement.startDate) : new Date(),
     graceMonths: blockchainAgreement?.graceMonths || dbAgreement?.graceMonths || 0,
     rentalAddress: rentalContractAddress || 
@@ -469,17 +715,10 @@ const LoanAgreementDetail: React.FC = () => {
   
   // Determine which action buttons to show based on loan status and user role
   const showFundButton = isUserLender() && 
-                        blockchainAgreement?.status === LoanAgreementStatus.INITIALIZED;
-                        
-  const showRepayButton = isUserBorrower() && 
-                        blockchainAgreement?.status === LoanAgreementStatus.PAID;
-                        
-  const showTestButtons = process.env.NODE_ENV === 'development' || 
-                          window.location.hostname === 'localhost';
+                        blockchainAgreement?.status === LoanAgreementStatus.READY;
                           
-  const nextPaymentMonth = blockchainAgreement?.lastPaidMonth 
-                          ? blockchainAgreement.lastPaidMonth + 1
-                          : 1;
+  // Always show Test Functions tab for specific actions in the workflow
+  const showTestButtons = true;
   
   // Determine available tabs based on status and role
   const getTabs = () => {
@@ -487,18 +726,13 @@ const LoanAgreementDetail: React.FC = () => {
       { id: 'overview', label: 'Overview', isVisible: true },
       { id: 'schedule', label: 'Payment Schedule', isVisible: true },
       { 
-        id: 'pay', 
-        label: 'Make Payment', 
-        isVisible: showRepayButton && blockchainAgreement?.status === LoanAgreementStatus.PAID 
-      },
-      { 
         id: 'fund', 
         label: 'Fund Loan', 
-        isVisible: showFundButton && blockchainAgreement?.status === LoanAgreementStatus.INITIALIZED
+        isVisible: showFundButton && blockchainAgreement?.status === LoanAgreementStatus.READY
       },
       { 
         id: 'test', 
-        label: 'Test Functions', 
+        label: 'Loan Operations', 
         isVisible: showTestButtons
       }
     ];
@@ -555,23 +789,12 @@ const LoanAgreementDetail: React.FC = () => {
             payments={payments}
             formatDate={formatDate}
             getPaymentStatusBadge={(status) => <PaymentStatusBadge status={status} />}
+            isUserBorrower={isUserBorrower()}
+            processingAction={processingAction}
+            loanStatus={loanDetails.status}
+            handlePayment={handlePayment}
           />
         </TabsContent>
-        
-        {/* Make Payment Tab */}
-        {showRepayButton && (
-        <TabsContent value="pay" className="space-y-6 mt-6">
-            <MakePaymentTab
-              contractAddress={dbAgreement.contractAddress}
-              installmentAmount={loanDetails.installmentAmount}
-              nextPaymentMonth={nextPaymentMonth}
-              daysUntilNextPayment={daysUntilNextPayment()}
-              processingAction={processingAction}
-              formatDate={formatDate}
-              handlePayment={handlePayment}
-            />
-          </TabsContent>
-        )}
         
         {/* Fund Loan Tab */}
         {showFundButton && (
@@ -590,9 +813,12 @@ const LoanAgreementDetail: React.FC = () => {
           <TabsContent value="test" className="space-y-6 mt-6">
             <TestFunctionsTab
               isUserBorrower={isUserBorrower()}
+              isUserLender={isUserLender()}
               processingAction={processingAction}
               loanStatus={loanDetails.status}
               handleSimulateDefault={handleSimulateDefault}
+              handleWithdrawCollateral={handleWithdrawCollateral}
+              handlePayRentUsingLoan={handlePayRentUsingLoan}
             />
         </TabsContent>
         )}
