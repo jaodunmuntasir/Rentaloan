@@ -1,76 +1,60 @@
-import { useState, useCallback } from 'react';
-import { ethers, Contract } from 'ethers';
-import { useContracts } from '../contexts/ContractContext';
+import { useState, useCallback, useEffect } from 'react';
+import { ethers } from 'ethers';
 import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 import { LoanApi } from '../services/api.service';
+import { 
+  LoanAgreementService, 
+  LoanDetails, 
+  LoanStatus,
+} from '../services/loan-agreement.service';
 
-interface RepaymentDetail {
-  month: number;
-  amount: string;
-  dueDate: Date;
-  paid: boolean;
+export interface LoanSummary {
+  totalLoanAmount: number;
+  totalRepayment: number;
+  paidAmount: number;
+  remainingAmount: number;
+  currentMonth: number;
+  progress: number;
 }
 
-interface LoanAgreementDetails {
-  borrower: string;
-  lender: string;
-  rentalAgreementAddress: string;
-  loanAmount: string;
-  interestRate: number;
-  monthlyPayment: string;
-  loanDuration: number;
-  graceMonths: number;
-  isActive: boolean;
-  isInitialized: boolean;
-  collateralAmount: string;
-  currentMonth: number;
-  repaymentSchedule: RepaymentDetail[];
-  availableSkips: number;
-  totalSkips: number;
+interface TransactionState {
+  isProcessing: boolean;
+  hash?: string;
+  error?: string;
+  isSuccess?: boolean;
 }
 
 export function useLoanAgreement(contractAddress?: string) {
-  const [loanContract, setLoanContract] = useState<Contract | null>(null);
-  const [details, setDetails] = useState<LoanAgreementDetails | null>(null);
+  // State for loan details
+  const [details, setDetails] = useState<LoanDetails | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   
-  const { getLoanContract } = useContracts();
-  const { signer, isConnected } = useWallet();
+  // Transaction states
+  const [fundingState, setFundingState] = useState<TransactionState>({
+    isProcessing: false
+  });
+  const [repaymentState, setRepaymentState] = useState<TransactionState>({
+    isProcessing: false
+  });
+  
+  // User states
+  const [userIsBorrower, setUserIsBorrower] = useState<boolean>(false);
+  const [userIsLender, setUserIsLender] = useState<boolean>(false);
+  
+  // Get wallet and auth context
+  const { signer, walletAddress, isConnected } = useWallet();
   const { currentUser } = useAuth();
   
-  // Initialize the contract
-  const initialize = useCallback(async (address: string) => {
-    if (!isConnected || !signer) {
-      setError("Wallet not connected");
-      return null;
-    }
-    
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const contract = await getLoanContract(address);
-      if (contract) {
-        setLoanContract(contract);
-        return contract;
-      } else {
-        setError("Failed to initialize loan contract");
-        return null;
-      }
-    } catch (err: any) {
-      setError(err.message || "Error initializing contract");
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [getLoanContract, isConnected, signer]);
+  // Event listener cleanup reference
+  const [eventListenerContract, setEventListenerContract] = useState<ethers.Contract | null>(null);
   
-  // Load loan agreement details
+  // Load loan details
   const loadDetails = useCallback(async () => {
-    if (!contractAddress) {
-      setError("Contract address not provided");
+    if (!contractAddress || !signer || !isConnected) {
+      setError("Contract address not provided or wallet not connected");
       return;
     }
     
@@ -78,92 +62,109 @@ export function useLoanAgreement(contractAddress?: string) {
       setLoading(true);
       setError(null);
       
-      // Initialize contract if not already done
-      const contract = loanContract || await initialize(contractAddress);
-      if (!contract) return;
+      // Fetch loan details from blockchain
+      const loanDetails = await LoanAgreementService.getLoanDetails(contractAddress, signer);
+      setDetails(loanDetails);
       
-      // Get basic contract data
-      const borrower = await contract.borrower();
-      const lender = await contract.lender();
-      const rentalAgreementAddress = await contract.rentalAgreement();
-      const loanAmount = ethers.formatEther(await contract.loanAmount());
-      const interestRateBps = Number(await contract.interestRate());
-      const interestRate = interestRateBps / 100; // Convert from basis points to percentage
-      const monthlyPayment = ethers.formatEther(await contract.monthlyPayment());
-      const loanDuration = Number(await contract.loanDuration());
-      const graceMonths = Number(await contract.graceMonths());
-      const isActive = await contract.isActive();
-      const isInitialized = await contract.isInitialized();
-      const collateralAmount = ethers.formatEther(await contract.collateralAmount());
-      const currentMonth = Number(await contract.currentMonth());
-      
-      // Calculate skip values based on grace months
-      // In a real implementation, these would come from the contract
-      const totalSkips = graceMonths;
-      // For demo purposes, assume half of grace months are still available
-      const availableSkips = Math.max(0, graceMonths - Math.floor(currentMonth / 2));
-      
-      // Get repayment schedule
-      const repaymentSchedule: RepaymentDetail[] = [];
-      for (let i = 1; i <= loanDuration; i++) {
-        const repayment = await contract.repaymentSchedule(i);
-        repaymentSchedule.push({
-          month: i,
-          amount: ethers.formatEther(repayment.amount),
-          dueDate: new Date(Number(repayment.dueDate) * 1000), // Convert to milliseconds
-          paid: repayment.paid
-        });
+      // Check if current user is borrower or lender
+      if (walletAddress) {
+        const isBorrower = loanDetails.borrower.toLowerCase() === walletAddress.toLowerCase();
+        const isLender = loanDetails.lender.toLowerCase() === walletAddress.toLowerCase();
+        
+        setUserIsBorrower(isBorrower);
+        setUserIsLender(isLender);
       }
-      
-      setDetails({
-        borrower,
-        lender,
-        rentalAgreementAddress,
-        loanAmount,
-        interestRate,
-        monthlyPayment,
-        loanDuration,
-        graceMonths,
-        isActive,
-        isInitialized,
-        collateralAmount,
-        currentMonth,
-        repaymentSchedule,
-        availableSkips,
-        totalSkips
-      });
     } catch (err: any) {
+      console.error("Error loading loan details:", err);
       setError(err.message || "Error loading loan details");
     } finally {
       setLoading(false);
     }
-  }, [contractAddress, initialize, loanContract]);
+  }, [contractAddress, signer, isConnected, walletAddress]);
   
-  // Initialize loan (for lender)
-  const initializeLoan = useCallback(async () => {
-    if (!contractAddress || !loanContract || !isConnected) {
+  // Refresh details when refresh trigger changes
+  useEffect(() => {
+    if (refreshTrigger > 0) {
+      loadDetails();
+    }
+  }, [refreshTrigger, loadDetails]);
+  
+  // Initial load of details
+  useEffect(() => {
+    if (contractAddress && signer && isConnected) {
+      loadDetails();
+    }
+  }, [contractAddress, signer, isConnected, loadDetails]);
+  
+  // Set up event listeners
+  useEffect(() => {
+    if (!contractAddress || !isConnected) return;
+    
+    // Get provider from signer
+    const provider = signer?.provider;
+    if (!provider) return;
+    
+    // Clean up previous listeners
+    if (eventListenerContract) {
+      eventListenerContract.removeAllListeners();
+    }
+    
+    // Set up new event listeners
+    const contract = LoanAgreementService.listenForEvents(
+      contractAddress,
+      provider,
+      (eventName, data) => {
+        console.log(`Event received: ${eventName}`, data);
+        // Refresh data when events occur
+        setRefreshTrigger(prev => prev + 1);
+      }
+    );
+    
+    setEventListenerContract(contract);
+    
+    // Cleanup function
+    return () => {
+      contract.removeAllListeners();
+    };
+  }, [contractAddress, signer, isConnected, eventListenerContract]);
+  
+  // Fund loan (for lender)
+  const fundLoan = useCallback(async () => {
+    if (!contractAddress || !signer || !isConnected || !details) {
       setError("Contract not initialized or wallet not connected");
       return null;
     }
     
+    if (!userIsLender) {
+      setError("Only the lender can fund this loan");
+      return null;
+    }
+    
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Get loan amount
-      const loanAmount = await loanContract.loanAmount();
-      
-      // Send transaction
-      const tx = await loanContract.initializeLoan({
-        value: loanAmount
+      setFundingState({
+        isProcessing: true
       });
       
-      // Wait for transaction to be mined
-      const receipt = await tx.wait();
+      // Call service to fund loan
+      const result = await LoanAgreementService.fundLoan(
+        contractAddress,
+        details.loanAmount,
+        signer
+      );
+      
+      if (!result.success) {
+        throw new Error(result.error || "Transaction failed");
+      }
+      
+      setFundingState({
+        isProcessing: false,
+        hash: result.transactionHash,
+        isSuccess: true
+      });
       
       // Update backend
       if (currentUser) {
-        // Convert Firebase User to App User
+        // Convert Firebase User to App User for API
         const appUser = {
           id: currentUser.uid,
           email: currentUser.email || '',
@@ -175,54 +176,72 @@ export function useLoanAgreement(contractAddress?: string) {
         await LoanApi.initializeLoan(
           appUser,
           contractAddress,
-          receipt.hash
+          result.transactionHash!
         );
       }
       
       // Refresh details
-      await loadDetails();
+      setRefreshTrigger(prev => prev + 1);
       
-      return receipt;
+      return result;
     } catch (err: any) {
-      setError(err.message || "Error initializing loan");
+      console.error("Error funding loan:", err);
+      setFundingState({
+        isProcessing: false,
+        error: err.message || "Error funding loan",
+        isSuccess: false
+      });
       return null;
-    } finally {
-      setLoading(false);
     }
-  }, [contractAddress, loanContract, isConnected, loadDetails, currentUser]);
+  }, [contractAddress, signer, isConnected, details, userIsLender, currentUser]);
   
   // Make repayment (for borrower)
   const makeRepayment = useCallback(async (month: number) => {
-    if (!contractAddress || !loanContract || !isConnected || !details) {
+    if (!contractAddress || !signer || !isConnected || !details) {
       setError("Contract not initialized or wallet not connected");
       return null;
     }
     
+    if (!userIsBorrower) {
+      setError("Only the borrower can make repayments");
+      return null;
+    }
+    
     try {
-      setLoading(true);
-      setError(null);
+      setRepaymentState({
+        isProcessing: true
+      });
       
       // Find repayment for the month
       const repayment = details.repaymentSchedule.find(r => r.month === month);
       if (!repayment) {
-        setError(`Repayment for month ${month} not found`);
-        return null;
+        throw new Error(`Repayment for month ${month} not found`);
       }
       
-      // Convert repayment amount to wei
-      const paymentAmount = ethers.parseEther(repayment.amount);
+      // Call service to make repayment
+      const result = await LoanAgreementService.makeRepayment(
+        contractAddress,
+        month,
+        repayment.amount,
+        signer
+      );
       
-      // Send transaction
-      const tx = await loanContract.makeRepayment(month, {
-        value: paymentAmount
+      if (!result.success) {
+        throw new Error(result.error || "Transaction failed");
+      }
+      
+      setRepaymentState({
+        isProcessing: false,
+        hash: result.transactionHash,
+        isSuccess: true
       });
       
-      // Wait for transaction to be mined
-      const receipt = await tx.wait();
+      // Check if this is the final payment
+      const isComplete = month === details.duration;
       
       // Update backend
       if (currentUser) {
-        // Convert Firebase User to App User
+        // Convert Firebase User to App User for API
         const appUser = {
           id: currentUser.uid,
           email: currentUser.email || '',
@@ -236,79 +255,139 @@ export function useLoanAgreement(contractAddress?: string) {
           contractAddress,
           month,
           repayment.amount,
-          receipt.hash
+          result.transactionHash!,
+          isComplete
         );
       }
       
       // Refresh details
-      await loadDetails();
+      setRefreshTrigger(prev => prev + 1);
       
-      return receipt;
+      return result;
     } catch (err: any) {
-      setError(err.message || "Error making repayment");
+      console.error("Error making repayment:", err);
+      setRepaymentState({
+        isProcessing: false,
+        error: err.message || "Error making repayment",
+        isSuccess: false
+      });
       return null;
-    } finally {
-      setLoading(false);
     }
-  }, [contractAddress, loanContract, isConnected, details, loadDetails, currentUser]);
+  }, [contractAddress, signer, isConnected, details, userIsBorrower, currentUser]);
   
-  // Check if user is borrower
-  const isBorrower = useCallback(async () => {
-    if (!details || !signer) return false;
-    const signerAddress = await signer.getAddress();
-    return details.borrower.toLowerCase() === signerAddress.toLowerCase();
-  }, [details, signer]);
-  
-  // Check if user is lender
-  const isLender = useCallback(async () => {
-    if (!details || !signer) return false;
-    const signerAddress = await signer.getAddress();
-    return details.lender.toLowerCase() === signerAddress.toLowerCase();
-  }, [details, signer]);
+  // Get unpaid months that are available for payment
+  const getAvailableMonthsForPayment = useCallback(() => {
+    if (!details) return [];
+    
+    const unpaidMonths: number[] = [];
+    const lastPaid = details.lastPaidMonth;
+    
+    // Loop through months to find unpaid ones
+    for (let i = 1; i <= details.duration; i++) {
+      const repayment = details.repaymentSchedule.find(r => r.month === i);
+      if (repayment && !repayment.paid && i > lastPaid) {
+        unpaidMonths.push(i);
+      }
+    }
+    
+    return unpaidMonths;
+  }, [details]);
   
   // Calculate loan summary
-  const loanSummary = useCallback(() => {
+  const getLoanSummary = useCallback((): LoanSummary | null => {
     if (!details) return null;
     
+    const totalLoanAmount = parseFloat(details.loanAmount);
+    
+    // Calculate total repayment from schedule
     const totalRepayment = details.repaymentSchedule.reduce(
       (total, month) => total + parseFloat(month.amount),
       0
     );
     
+    // Calculate amount paid so far
     const paidAmount = details.repaymentSchedule
       .filter(month => month.paid)
       .reduce((total, month) => total + parseFloat(month.amount), 0);
     
+    // Calculate remaining amount
     const remainingAmount = totalRepayment - paidAmount;
     
+    // Calculate progress percentage
+    const progress = Math.round((paidAmount / totalRepayment) * 100);
+    
     return {
-      totalLoanAmount: parseFloat(details.loanAmount),
+      totalLoanAmount,
       totalRepayment,
       paidAmount,
       remainingAmount,
-      currentMonth: details.currentMonth,
-      progress: Math.round((paidAmount / totalRepayment) * 100)
+      currentMonth: details.lastPaidMonth + 1,
+      progress
     };
   }, [details]);
   
-  // Initialize when address is provided
-  useCallback(() => {
-    if (contractAddress && !loanContract) {
-      initialize(contractAddress);
+  // Get formatted actions available based on user role and loan status
+  const getAvailableActions = useCallback(() => {
+    if (!details) return [];
+    
+    const actions: { id: string; label: string; action: () => Promise<any>; disabled: boolean }[] = [];
+    
+    // Lender actions
+    if (userIsLender) {
+      // Fund loan action
+      if (details.status === LoanStatus.INITIALIZED) {
+        actions.push({
+          id: 'fund',
+          label: 'Fund Loan',
+          action: fundLoan,
+          disabled: fundingState.isProcessing
+        });
+      }
     }
-  }, [contractAddress, loanContract, initialize]);
+    
+    // Borrower actions
+    if (userIsBorrower) {
+      // Make repayment action
+      if (details.status === LoanStatus.PAID) {
+        const nextMonth = details.lastPaidMonth + 1;
+        
+        if (nextMonth <= details.duration) {
+          actions.push({
+            id: 'repay',
+            label: `Make Payment for Month ${nextMonth}`,
+            action: () => makeRepayment(nextMonth),
+            disabled: repaymentState.isProcessing
+          });
+        }
+      }
+    }
+    
+    return actions;
+  }, [details, userIsLender, userIsBorrower, fundLoan, makeRepayment, fundingState.isProcessing, repaymentState.isProcessing]);
   
   return {
-    loanContract,
+    // Basic state
     details,
     loading,
     error,
-    initialize,
+    
+    // User role information
+    isBorrower: userIsBorrower,
+    isLender: userIsLender,
+    
+    // Transaction states
+    fundingState,
+    repaymentState,
+    
+    // Methods
     loadDetails,
-    initializeLoan,
+    fundLoan,
     makeRepayment,
-    isBorrower,
-    isLender,
-    loanSummary
+    getAvailableMonthsForPayment,
+    getLoanSummary,
+    getAvailableActions,
+    
+    // Helper function to refresh data
+    refreshData: () => setRefreshTrigger(prev => prev + 1)
   };
 } 
