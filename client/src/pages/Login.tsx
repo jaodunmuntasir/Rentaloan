@@ -1,37 +1,44 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Button } from '../components/ui/button';
-import { Label } from '../components/ui/label';
-import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { Button } from "../components/ui/button";
+import { Label } from "../components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
 const Login: React.FC = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!email || !password) {
-      setError('Please fill in all fields');
+      setError("Please fill in all fields");
       return;
     }
-    
+
     try {
-      setError('');
+      setError("");
       setLoading(true);
       await login(email, password);
-      navigate('/dashboard');
+      navigate("/dashboard");
     } catch (err: any) {
-      setError('Failed to sign in: ' + (err.message || 'Unknown error'));
+      setError("Failed to sign in: " + (err.message || "Unknown error"));
     } finally {
       setLoading(false);
     }
@@ -42,12 +49,12 @@ const Login: React.FC = () => {
       <div className="w-full max-w-md">
         <Card className="shadow-xl">
           <CardHeader className="text-center space-y-1">
-            <CardTitle className="text-2xl font-bold">RentLoan</CardTitle>
+            <CardTitle className="text-2xl font-bold">Rentaloan</CardTitle>
             <CardDescription>
               Sign in to your account to continue
             </CardDescription>
           </CardHeader>
-          
+
           <CardContent>
             {error && (
               <Alert className="mb-4 border-red-200 bg-red-50">
@@ -58,7 +65,7 @@ const Login: React.FC = () => {
                 </AlertDescription>
               </Alert>
             )}
-            
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email address</Label>
@@ -71,7 +78,7 @@ const Login: React.FC = () => {
                   required
                 />
               </div>
-              
+
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
@@ -85,10 +92,10 @@ const Login: React.FC = () => {
                   required
                 />
               </div>
-              
-              <Button 
-                type="submit" 
-                className="w-full font-medium" 
+
+              <Button
+                type="submit"
+                className="w-full font-medium"
                 disabled={loading}
               >
                 {loading ? (
@@ -102,12 +109,12 @@ const Login: React.FC = () => {
               </Button>
             </form>
           </CardContent>
-          
+
           <CardFooter className="flex justify-center border-t p-4">
             <div className="text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link 
-                to="/register" 
+              <Link
+                to="/register"
                 className="text-primary font-medium hover:underline"
               >
                 Create an account
@@ -115,13 +122,23 @@ const Login: React.FC = () => {
             </div>
           </CardFooter>
         </Card>
-        
+
         <div className="mt-4 text-center text-sm text-muted-foreground">
-          &copy; {new Date().getFullYear()} RentLoan. All rights reserved.
+          <p>
+            <Link
+              to="https://muntasir.tech/"
+              className="text-sm text-muted-foreground hover:text-primary"
+            >
+              Developed by Jaodun Muntasir
+            </Link>
+          </p>
+          &copy; {new Date().getFullYear()} Rentaloan. All rights reserved.
+          <br />
         </div>
+        <div className="flex items-center space-x-4 mt-4 md:mt-0"></div>
       </div>
     </div>
   );
 };
 
-export default Login; 
+export default Login;

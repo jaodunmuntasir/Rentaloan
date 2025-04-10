@@ -92,99 +92,124 @@ router.get('/dashboard', authenticate, async (req: Request, res: Response) => {
     let loanOffers: any[] = [];
     let payments: any[] = [];
     
-    // Get rental agreements where user is either landlord or renter
-    const allRentalAgreements = await RentalAgreement.findAll({
-      where: {
-        [Op.or]: [
-          { landlordId: user.id },
-          { renterId: user.id }
-        ]
-      },
-      include: [
-        { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
-        { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
-      ],
-      order: [['createdDate', 'DESC']]
-    });
-    
-    // Add user's role for each agreement
-    rentalAgreements = allRentalAgreements.map(agreement => {
-      const agreementJson = agreement.toJSON();
-      agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
-      return agreementJson;
-    });
-    
-    // Get loan agreements where user is either lender or borrower
-    const allLoanAgreements = await LoanAgreement.findAll({
-      where: {
-        [Op.or]: [
-          { lenderId: user.id },
-          { borrowerId: user.id }
-        ]
-      },
-      include: [
-        { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] },
-        { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] }
-      ],
-      order: [['createdDate', 'DESC']]
-    });
-    
-    // Add user's role for each loan agreement
-    loanAgreements = allLoanAgreements.map(agreement => {
-      const agreementJson = agreement.toJSON();
-      agreementJson.userRole = agreement.lenderId === user.id ? 'lender' : 'borrower';
-      return agreementJson;
-    });
-    
-    // Get loan requests made by this user
-    loanRequests = await LoanRequest.findAll({
-      where: { requesterId: user.id },
-      include: [
-        { model: RentalAgreement },
-        { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    // Get loan offers made by this user
-    loanOffers = await LoanOffer.findAll({
-      where: { lenderId: user.id },
-      include: [
-        { 
-          model: LoanRequest,
-          include: [
-            { model: RentalAgreement },
-            { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+    try {
+      // Get rental agreements where user is either landlord or renter
+      const allRentalAgreements = await RentalAgreement.findAll({
+        where: {
+          [Op.or]: [
+            { landlordId: user.id },
+            { renterId: user.id }
           ]
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
+        },
+        include: [
+          { model: User, as: 'landlord', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'renter', attributes: ['id', 'email', 'walletAddress'] }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Add user's role for each agreement
+      rentalAgreements = allRentalAgreements.map(agreement => {
+        const agreementJson = agreement.toJSON();
+        agreementJson.userRole = agreement.landlordId === user.id ? 'landlord' : 'renter';
+        return agreementJson;
+      });
+    } catch (error) {
+      console.error('Error retrieving rental agreements:', error);
+      // Continue with the other data
+    }
     
-    // Get payments related to the user (both sent and received)
-    payments = await Payment.findAll({
-      where: {
-        [Op.or]: [
-          { payerId: user.id },
-          { recipientId: user.id }
-        ]
-      },
-      include: [
-        { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
-        { model: User, as: 'recipient', attributes: ['id', 'email', 'walletAddress'] },
-        { model: RentalAgreement, required: false },
-        { model: LoanAgreement, required: false }
-      ],
-      order: [['paymentDate', 'DESC']],
-      limit: 20
-    });
+    try {
+      // Get loan agreements where user is either lender or borrower
+      const allLoanAgreements = await LoanAgreement.findAll({
+        where: {
+          [Op.or]: [
+            { lenderId: user.id },
+            { borrowerId: user.id }
+          ]
+        },
+        include: [
+          { model: User, as: 'lender', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'borrower', attributes: ['id', 'email', 'walletAddress'] }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Add user's role for each loan agreement
+      loanAgreements = allLoanAgreements.map(agreement => {
+        const agreementJson = agreement.toJSON();
+        agreementJson.userRole = agreement.lenderId === user.id ? 'lender' : 'borrower';
+        return agreementJson;
+      });
+    } catch (error) {
+      console.error('Error retrieving loan agreements:', error);
+      // Continue with the other data
+    }
     
-    // Add user's role for each payment
-    payments = payments.map(payment => {
-      const paymentJson = payment.toJSON();
-      paymentJson.userRole = payment.payerId === user.id ? 'payer' : 'recipient';
-      return paymentJson;
-    });
+    try {
+      // Get loan requests made by this user
+      loanRequests = await LoanRequest.findAll({
+        where: { requesterId: user.id },
+        include: [
+          { model: RentalAgreement },
+          { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+    } catch (error) {
+      console.error('Error retrieving loan requests:', error);
+      // Continue with the other data
+    }
+    
+    try {
+      // Get loan offers made by this user
+      loanOffers = await LoanOffer.findAll({
+        where: { lenderId: user.id },
+        include: [
+          { 
+            model: LoanRequest,
+            include: [
+              { model: RentalAgreement },
+              { model: User, as: 'requester', attributes: ['id', 'email', 'walletAddress'] }
+            ]
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+    } catch (error) {
+      console.error('Error retrieving loan offers:', error);
+      // Continue with the other data
+    }
+    
+    try {
+      // Get payments related to the user (both sent and received)
+      payments = await Payment.findAll({
+        where: {
+          [Op.or]: [
+            { payerId: user.id },
+            { recipientId: user.id }
+          ]
+        },
+        include: [
+          { model: User, as: 'payer', attributes: ['id', 'email', 'walletAddress'] },
+          { model: User, as: 'recipient', attributes: ['id', 'email', 'walletAddress'] },
+          { model: RentalAgreement, required: false },
+          { model: LoanAgreement, required: false }
+        ],
+        order: [['paymentDate', 'DESC']],
+        limit: 20
+      });
+      
+      // Add user's role for each payment
+      payments = payments.map(payment => {
+        const paymentJson = payment.toJSON();
+        paymentJson.userRole = payment.payerId === user.id ? 'payer' : 'recipient';
+        return paymentJson;
+      });
+    } catch (error) {
+      console.error('Error retrieving payments:', error);
+      // Continue with the other data
+    }
     
     res.json({
       user: {

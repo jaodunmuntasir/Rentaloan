@@ -145,7 +145,7 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
       <ul className="space-y-1">
         <li>
           <Link 
-            to="/help" 
+            to="https://github.com/jaodunmuntasir/Rentaloan" 
             className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           >
             <span>
