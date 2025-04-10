@@ -17,6 +17,16 @@ interface ILoanAgreement {
         COMPLETED,    // Successfully repaid loan
         DEFAULTED     // Loan went into default
     }
+
+    /**
+     * @dev Activate the loan by withdrawing collateral
+     */
+    function activateLoan() external;
+
+    /**
+     * @dev Pay the rental contract with loan amount
+     */
+    function payRental() external;
     
     /**
      * @dev Returns the borrower address

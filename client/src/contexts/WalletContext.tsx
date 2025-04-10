@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { useAuth } from './AuthContext';
+import { setupDebugHelpers } from '../utils/debugHelpers';
 
 interface WalletContextType {
   provider: ethers.JsonRpcProvider | null;
@@ -126,6 +127,10 @@ export const WalletProvider: React.FC<{children: React.ReactNode}> = ({ children
         
         setIsConnected(true);
         console.log("Wallet connected successfully");
+        
+        // Setup debug helpers in the console
+        setupDebugHelpers(connectedSigner);
+        
         return true;
       } catch (signerError) {
         console.error("Error getting signer:", signerError);
@@ -153,6 +158,9 @@ export const WalletProvider: React.FC<{children: React.ReactNode}> = ({ children
         
         // Update the user's wallet address in the backend
         await updateWalletAddress(address);
+        
+        // Setup debug helpers in the console
+        setupDebugHelpers(connectedSigner);
         
         return true;
       }

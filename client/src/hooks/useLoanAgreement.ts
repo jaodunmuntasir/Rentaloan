@@ -42,6 +42,12 @@ export function useLoanAgreement(contractAddress?: string) {
   const [repaymentState, setRepaymentState] = useState<TransactionState>({
     isProcessing: false
   });
+  const [activationState, setActivationState] = useState<TransactionState>({
+    isProcessing: false
+  });
+  const [payRentalState, setPayRentalState] = useState<TransactionState>({
+    isProcessing: false
+  });
   
   // User states
   const [userIsBorrower, setUserIsBorrower] = useState<boolean>(false);
@@ -133,6 +139,44 @@ export function useLoanAgreement(contractAddress?: string) {
         throw new Error("User not authenticated");
       }
       
+      console.log("=== DEBUG: Starting loan funding process ===");
+      console.log("Contract address:", contractAddress);
+      console.log("Loan amount:", details.loanAmount);
+      
+      // Get rental contract address for debugging
+      const loanContract = LoanAgreementService.getContractInstance(contractAddress, signer);
+      const rentalContractAddress = await loanContract.rentalContract();
+      console.log("Rental contract address:", rentalContractAddress);
+      
+      // Get rental contract status BEFORE funding
+      try {
+        const provider = signer.provider as ethers.BrowserProvider;
+        const rentalContractABI = [
+          "function getContractStatus() external view returns (uint8)",
+          "function getContractDetails() external view returns (address, address, uint256, uint256, uint256, uint256, uint8, uint256, uint256, uint256, uint256, uint256)"
+        ];
+        const rentalContract = new ethers.Contract(rentalContractAddress, rentalContractABI, signer);
+        const status = await rentalContract.getContractStatus();
+        const details = await rentalContract.getContractDetails();
+        console.log("Rental contract status BEFORE:", status);
+        console.log("Rental contract details BEFORE:", {
+          landlord: details[0],
+          renter: details[1],
+          rentalDuration: Number(details[2]),
+          securityDeposit: ethers.formatEther(details[3]),
+          baseRent: ethers.formatEther(details[4]),
+          gracePeriod: Number(details[5]),
+          status: Number(details[6]),
+          currentSecurityDeposit: ethers.formatEther(details[7]),
+          lastPaidMonth: Number(details[8]),
+          dueAmount: ethers.formatEther(details[9]),
+          skippedMonths: Number(details[10]),
+          currentMonth: Number(details[11]),
+        });
+      } catch (err) {
+        console.error("Error getting rental contract details BEFORE:", err);
+      }
+      
       // Use LoanSyncService to fund loan with synchronized backend update
       const result = await LoanSyncService.fundLoan(
         appUser,
@@ -140,6 +184,55 @@ export function useLoanAgreement(contractAddress?: string) {
         details.loanAmount,
         signer
       );
+      
+      console.log("Funding result:", result);
+      
+      if (result.success) {
+        console.log("Transaction hash:", result.transactionHash);
+        
+        // Try to get transaction receipt for more details
+        try {
+          const provider = signer.provider as ethers.BrowserProvider;
+          const receipt = await provider.getTransactionReceipt(result.transactionHash!);
+          console.log("Transaction receipt:", receipt);
+          
+          // Parse logs for events
+          if (receipt && receipt.logs) {
+            console.log("Transaction logs:", receipt.logs);
+          }
+        } catch (err) {
+          console.error("Error getting transaction receipt:", err);
+        }
+        
+        // Check rental contract status AFTER funding
+        try {
+          const provider = signer.provider as ethers.BrowserProvider;
+          const rentalContractABI = [
+            "function getContractStatus() external view returns (uint8)",
+            "function getContractDetails() external view returns (address, address, uint256, uint256, uint256, uint256, uint8, uint256, uint256, uint256, uint256, uint256)"
+          ];
+          const rentalContract = new ethers.Contract(rentalContractAddress, rentalContractABI, signer);
+          const status = await rentalContract.getContractStatus();
+          const details = await rentalContract.getContractDetails();
+          console.log("Rental contract status AFTER:", status);
+          console.log("Rental contract details AFTER:", {
+            landlord: details[0],
+            renter: details[1],
+            rentalDuration: Number(details[2]),
+            securityDeposit: ethers.formatEther(details[3]),
+            baseRent: ethers.formatEther(details[4]),
+            gracePeriod: Number(details[5]),
+            status: Number(details[6]),
+            currentSecurityDeposit: ethers.formatEther(details[7]),
+            lastPaidMonth: Number(details[8]),
+            dueAmount: ethers.formatEther(details[9]),
+            skippedMonths: Number(details[10]),
+            currentMonth: Number(details[11]),
+          });
+        } catch (err) {
+          console.error("Error getting rental contract details AFTER:", err);
+        }
+      }
       
       setFundingState({
         isProcessing: false,
@@ -284,15 +377,141 @@ export function useLoanAgreement(contractAddress?: string) {
     };
   }, [details]);
   
+  // Activate loan (after funding)
+  const activateLoan = useCallback(async (): Promise<SyncResult | null> => {
+    if (!contractAddress || !signer || !isConnected || !details) {
+      setError("Contract not initialized or wallet not connected");
+      return null;
+    }
+    
+    // Both borrower and lender can activate the loan
+    if (!userIsBorrower && !userIsLender) {
+      setError("Only the borrower or lender can activate this loan");
+      return null;
+    }
+    
+    try {
+      setActivationState({
+        isProcessing: true
+      });
+      
+      // Get app user for API
+      const appUser = await getAppUser();
+      if (!appUser) {
+        throw new Error("User not authenticated");
+      }
+      
+      console.log("=== DEBUG: Starting loan activation process ===");
+      console.log("Contract address:", contractAddress);
+      
+      // Use LoanSyncService to activate loan with synchronized backend update
+      const result = await LoanSyncService.activateLoan(
+        appUser,
+        contractAddress,
+        signer
+      );
+      
+      console.log("Activation result:", result);
+      
+      setActivationState({
+        isProcessing: false,
+        hash: result.transactionHash,
+        isSuccess: result.success,
+        syncedWithBackend: result.syncedWithBackend,
+        backendError: result.backendError,
+        error: result.success ? undefined : result.error
+      });
+      
+      if (result.success) {
+        // Refresh details
+        setRefreshTrigger(prev => prev + 1);
+      }
+      
+      return result;
+    } catch (err: any) {
+      console.error("Error activating loan:", err);
+      setActivationState({
+        isProcessing: false,
+        error: err.message || "Error activating loan",
+        isSuccess: false,
+        syncedWithBackend: false
+      });
+      return null;
+    }
+  }, [contractAddress, signer, isConnected, details, userIsBorrower, userIsLender, getAppUser]);
+  
+  // Pay rental (after activation)
+  const payRental = useCallback(async (): Promise<SyncResult | null> => {
+    if (!contractAddress || !signer || !isConnected || !details) {
+      setError("Contract not initialized or wallet not connected");
+      return null;
+    }
+    
+    // Both borrower and lender can pay rental
+    if (!userIsBorrower && !userIsLender) {
+      setError("Only the borrower or lender can pay rental");
+      return null;
+    }
+    
+    try {
+      setPayRentalState({
+        isProcessing: true
+      });
+      
+      // Get app user for API
+      const appUser = await getAppUser();
+      if (!appUser) {
+        throw new Error("User not authenticated");
+      }
+      
+      console.log("=== DEBUG: Starting pay rental process ===");
+      console.log("Contract address:", contractAddress);
+      
+      // Use LoanSyncService to pay rental with synchronized backend update
+      const result = await LoanSyncService.payRental(
+        appUser,
+        contractAddress,
+        signer
+      );
+      
+      console.log("Pay rental result:", result);
+      
+      setPayRentalState({
+        isProcessing: false,
+        hash: result.transactionHash,
+        isSuccess: result.success,
+        syncedWithBackend: result.syncedWithBackend,
+        backendError: result.backendError,
+        error: result.success ? undefined : result.error
+      });
+      
+      if (result.success) {
+        // Refresh details
+        setRefreshTrigger(prev => prev + 1);
+      }
+      
+      return result;
+    } catch (err: any) {
+      console.error("Error paying rental:", err);
+      setPayRentalState({
+        isProcessing: false,
+        error: err.message || "Error paying rental",
+        isSuccess: false,
+        syncedWithBackend: false
+      });
+      return null;
+    }
+  }, [contractAddress, signer, isConnected, details, userIsBorrower, userIsLender, getAppUser]);
+  
   // Get formatted actions available based on user role and loan status
   const getAvailableActions = useCallback(() => {
     if (!details) return [];
     
     const actions: { id: string; label: string; action: () => Promise<any>; disabled: boolean }[] = [];
     
-    // Lender actions
+    // Lender actions for funding
     if (userIsLender) {
-      // Fund loan action
+      // Fund loan action (initial state)
       if (details.status === LoanStatus.INITIALIZED) {
         actions.push({
           id: 'fund',
@@ -303,7 +522,27 @@ export function useLoanAgreement(contractAddress?: string) {
       }
     }
     
-    // Borrower actions
+    // Both lender and borrower can activate the loan after funding
+    if ((userIsLender || userIsBorrower) && details.status === LoanStatus.READY) {
+      actions.push({
+        id: 'activate',
+        label: 'Activate Loan',
+        action: activateLoan,
+        disabled: activationState.isProcessing
+      });
+    }
+    
+    // Both lender and borrower can pay rental after activation
+    if ((userIsLender || userIsBorrower) && details.status === LoanStatus.ACTIVE) {
+      actions.push({
+        id: 'payRental',
+        label: 'Pay Rental',
+        action: payRental,
+        disabled: payRentalState.isProcessing
+      });
+    }
+    
+    // Borrower actions for repayment
     if (userIsBorrower) {
       // Make repayment action
       if (details.status === LoanStatus.PAID) {
@@ -321,7 +560,19 @@ export function useLoanAgreement(contractAddress?: string) {
     }
     
     return actions;
-  }, [details, userIsLender, userIsBorrower, fundLoan, makeRepayment, fundingState.isProcessing, repaymentState.isProcessing]);
+  }, [
+    details, 
+    userIsLender, 
+    userIsBorrower, 
+    fundLoan, 
+    activateLoan, 
+    payRental, 
+    makeRepayment, 
+    fundingState.isProcessing, 
+    activationState.isProcessing, 
+    payRentalState.isProcessing, 
+    repaymentState.isProcessing
+  ]);
   
   return {
     // Basic state
@@ -336,6 +587,8 @@ export function useLoanAgreement(contractAddress?: string) {
     // Transaction states
     fundingState,
     repaymentState,
+    activationState,
+    payRentalState,
     
     // Methods
     loadDetails,
@@ -344,6 +597,8 @@ export function useLoanAgreement(contractAddress?: string) {
     getAvailableMonthsForPayment,
     getLoanSummary,
     getAvailableActions,
+    activateLoan,
+    payRental,
     
     // Helper function to refresh data
     refreshData: () => setRefreshTrigger(prev => prev + 1)

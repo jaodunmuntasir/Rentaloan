@@ -461,11 +461,12 @@ router.post('/:address/repay', authenticate, async (req: Request, res: Response)
       });
     }
     
-    // Check if loan is in ACTIVE status
-    if (loanAgreement.status !== LoanAgreementStatus.ACTIVE) {
+    // Check if loan is in ACTIVE or PAID status
+    if (loanAgreement.status !== LoanAgreementStatus.ACTIVE && 
+        loanAgreement.status !== LoanAgreementStatus.PAID) {
       return res.status(400).json({ 
         success: false, 
-        message: "Loan agreement is not active" 
+        message: "Loan agreement is not active or paid" 
       });
     }
     

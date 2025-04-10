@@ -32,8 +32,12 @@ const AgreementDetail = () => {
     isLender,
     fundingState,
     repaymentState,
+    activationState,
+    payRentalState,
     fundLoan,
     makeRepayment,
+    activateLoan,
+    payRental,
     getLoanSummary,
     getAvailableActions,
     refreshData
@@ -141,6 +145,26 @@ const AgreementDetail = () => {
         </Alert>
       )}
 
+      {activationState.isProcessing && (
+        <Alert>
+          <InfoCircledIcon className="h-4 w-4" />
+          <AlertTitle>Transaction in Progress</AlertTitle>
+          <AlertDescription>
+            Your loan activation transaction is being processed...
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {payRentalState.isProcessing && (
+        <Alert>
+          <InfoCircledIcon className="h-4 w-4" />
+          <AlertTitle>Transaction in Progress</AlertTitle>
+          <AlertDescription>
+            Your pay rental transaction is being processed...
+          </AlertDescription>
+        </Alert>
+      )}
+
       {repaymentState.isProcessing && (
         <Alert>
           <InfoCircledIcon className="h-4 w-4" />
@@ -157,6 +181,26 @@ const AgreementDetail = () => {
           <AlertTitle className="text-green-600">Transaction Complete</AlertTitle>
           <AlertDescription className="text-green-700">
             Your loan funding transaction was successful and has been recorded.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {activationState.isSuccess && activationState.syncedWithBackend && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircledIcon className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-600">Transaction Complete</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Your loan activation transaction was successful and has been recorded.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {payRentalState.isSuccess && payRentalState.syncedWithBackend && (
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircledIcon className="h-4 w-4 text-green-600" />
+          <AlertTitle className="text-green-600">Transaction Complete</AlertTitle>
+          <AlertDescription className="text-green-700">
+            Your pay rental transaction was successful and has been recorded.
           </AlertDescription>
         </Alert>
       )}
@@ -182,6 +226,28 @@ const AgreementDetail = () => {
         </Alert>
       )}
 
+      {activationState.isSuccess && !activationState.syncedWithBackend && (
+        <Alert className="bg-yellow-50 border-yellow-200">
+          <InfoCircledIcon className="h-4 w-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-600">Partial Success</AlertTitle>
+          <AlertDescription className="text-yellow-700">
+            Your loan activation transaction was successful on the blockchain, but we couldn't record it in our database.
+            {activationState.backendError && <span className="block mt-1">Error: {activationState.backendError}</span>}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {payRentalState.isSuccess && !payRentalState.syncedWithBackend && (
+        <Alert className="bg-yellow-50 border-yellow-200">
+          <InfoCircledIcon className="h-4 w-4 text-yellow-600" />
+          <AlertTitle className="text-yellow-600">Partial Success</AlertTitle>
+          <AlertDescription className="text-yellow-700">
+            Your pay rental transaction was successful on the blockchain, but we couldn't record it in our database.
+            {payRentalState.backendError && <span className="block mt-1">Error: {payRentalState.backendError}</span>}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {repaymentState.isSuccess && !repaymentState.syncedWithBackend && (
         <Alert className="bg-yellow-50 border-yellow-200">
           <InfoCircledIcon className="h-4 w-4 text-yellow-600" />
@@ -189,6 +255,26 @@ const AgreementDetail = () => {
           <AlertDescription className="text-yellow-700">
             Your repayment transaction was successful on the blockchain, but we couldn't record it in our database.
             {repaymentState.backendError && <span className="block mt-1">Error: {repaymentState.backendError}</span>}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {activationState.error && (
+        <Alert variant="destructive">
+          <ExclamationTriangleIcon className="h-4 w-4" />
+          <AlertTitle>Transaction Failed</AlertTitle>
+          <AlertDescription>
+            {activationState.error}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {payRentalState.error && (
+        <Alert variant="destructive">
+          <ExclamationTriangleIcon className="h-4 w-4" />
+          <AlertTitle>Transaction Failed</AlertTitle>
+          <AlertDescription>
+            {payRentalState.error}
           </AlertDescription>
         </Alert>
       )}

@@ -115,13 +115,16 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         emit StatusChanged(oldStatus, Status.READY);
         
         // Proceed to activate the loan
-        _activateLoan();
+        // _activateLoan();
     }
-    
+
     /**
-     * @dev Activate the loan by withdrawing collateral
-     */
-    function _activateLoan() internal {
+    * @dev Activate the loan by withdrawing collateral (called by either borrower or lender)
+    */
+    function activateLoan() external nonReentrant validFactory {
+        require(msg.sender == borrower || msg.sender == lender, "LoanAgreement: Only borrower or lender can activate");
+        require(_status == Status.READY, "LoanAgreement: Loan must be in READY status");
+        
         IRentalAgreement rental = IRentalAgreement(rentalContract);
         
         // Check available collateral
@@ -134,19 +137,19 @@ contract LoanAgreement is ILoanAgreement, ReentrancyGuard {
         Status oldStatus = _status;
         _status = Status.ACTIVE;
         emit StatusChanged(oldStatus, Status.ACTIVE);
-        
-        // Proceed to pay rental
-        _payRental();
     }
     
     /**
-     * @dev Pay the rental contract with loan amount
-     */
-    function _payRental() internal {
+    * @dev Pay the rental contract with loan amount (called by either borrower or lender)
+    */
+    function payRental() external nonReentrant validFactory {
+        require(msg.sender == borrower || msg.sender == lender, "LoanAgreement: Only borrower or lender can pay rental");
+        require(_status == Status.ACTIVE, "LoanAgreement: Loan must be in ACTIVE status");
+        
         IRentalAgreement rental = IRentalAgreement(rentalContract);
         
         // Transfer the loan amount to the rental contract to pay rent
-        rental.receiveRentFromLoan{value: loanAmount};
+        rental.receiveRentFromLoan{value: loanAmount}();
         
         // Update status to PAID
         Status oldStatus = _status;

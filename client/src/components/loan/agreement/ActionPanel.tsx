@@ -119,6 +119,36 @@ const ActionPanel: React.FC<ActionPanelProps> = ({
                     </div>
                   )}
                   
+                  {action.id === 'activate' && (
+                    <div className="space-y-4">
+                      <p className="text-sm">
+                        You are about to activate this loan. This will withdraw collateral from the rental contract.
+                      </p>
+                      <Button 
+                        onClick={action.action} 
+                        disabled={action.disabled}
+                        className="w-full"
+                      >
+                        Confirm Activate Loan
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {action.id === 'payRental' && (
+                    <div className="space-y-4">
+                      <p className="text-sm">
+                        You are about to pay the rental using loan funds. This will transfer the loan amount to the rental contract.
+                      </p>
+                      <Button 
+                        onClick={action.action} 
+                        disabled={action.disabled}
+                        className="w-full"
+                      >
+                        Confirm Pay Rental
+                      </Button>
+                    </div>
+                  )}
+                  
                   {action.id === 'repay' && (
                     <div className="space-y-4">
                       <p className="text-sm">

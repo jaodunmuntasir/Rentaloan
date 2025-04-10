@@ -180,17 +180,59 @@ export class LoanAgreementService {
     try {
       const contract = this.getContractInstance(address, signer);
       
+      // Set up event listeners for debugging
+      contract.on("StatusChanged", (oldStatus: any, newStatus: any) => {
+        console.log("📢 StatusChanged event:", { oldStatus: Number(oldStatus), newStatus: Number(newStatus) });
+      });
+      
+      contract.on("LoanStarted", (amount: any, collateral: any) => {
+        console.log("📢 LoanStarted event:", { 
+          amount: ethers.formatEther(amount), 
+          collateral: ethers.formatEther(collateral)
+        });
+      });
+      
+      // Get the rental contract address
+      const rentalAddress = await contract.rentalContract();
+      
+      // Set up a minimal interface for RentalAgreement to watch its events
+      const rentalABI = [
+        "event RentPaid(uint256 month, uint256 amount, uint256 dueAmount)",
+        "function receiveRentFromLoan() external payable"
+      ];
+      
+      const rentalContract = new ethers.Contract(rentalAddress, rentalABI, signer);
+      
+      // Watch for RentPaid events on rental contract
+      rentalContract.on("RentPaid", (month: any, amount: any, dueAmount: any) => {
+        console.log("📢 RentPaid event from rental contract:", {
+          month: Number(month),
+          amount: ethers.formatEther(amount),
+          dueAmount: ethers.formatEther(dueAmount)
+        });
+      });
+      
+      console.log("Starting fundLoan transaction with amount:", amount);
+      
       // Convert ETH to Wei
       const amountWei = ethers.parseEther(amount);
       
       // Send transaction
       const tx = await contract.fundLoan({
         value: amountWei,
-        gasLimit: 500000 // Estimated gas limit
+        gasLimit: 30000000 // Estimated gas limit
       });
       
+      console.log("Transaction sent:", tx.hash);
+      
       // Wait for transaction to be mined
+      console.log("Waiting for transaction confirmation...");
       const receipt = await tx.wait();
+      console.log("Transaction confirmed in block:", receipt.blockNumber);
+      
+      // Clean up event listeners
+      contract.removeAllListeners();
+      rentalContract.removeAllListeners();
       
       return {
         success: true,
@@ -400,5 +442,133 @@ export class LoanAgreementService {
     const monthlyPayment = parseFloat(totalRepayment) / duration;
     
     return monthlyPayment.toFixed(18);
+  }
+
+  /**
+   * Activate a loan (called after funding)
+   * 
+   * @param address The loan agreement contract address
+   * @param signer The ethers.js signer
+   * @returns Promise resolving to transaction result
+   */
+  public static async activateLoan(
+    address: string,
+    signer: ethers.Signer
+  ): Promise<TransactionResult> {
+    try {
+      const contract = this.getContractInstance(address, signer);
+      
+      // Set up event listeners for debugging
+      contract.on("StatusChanged", (oldStatus: any, newStatus: any) => {
+        console.log("📢 StatusChanged event:", { oldStatus: Number(oldStatus), newStatus: Number(newStatus) });
+      });
+      
+      console.log("Starting activateLoan transaction");
+      
+      // Send transaction
+      const tx = await contract.activateLoan({
+        gasLimit: 30000000 // Estimated gas limit
+      });
+      
+      console.log("Transaction sent:", tx.hash);
+      
+      // Wait for transaction to be mined
+      console.log("Waiting for transaction confirmation...");
+      const receipt = await tx.wait();
+      console.log("Transaction confirmed in block:", receipt.blockNumber);
+      
+      // Clean up event listeners
+      contract.removeAllListeners();
+      
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber
+      };
+    } catch (error) {
+      console.error('Error activating loan:', error);
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
+  }
+
+  /**
+   * Pay rental using the loan amount
+   * 
+   * @param address The loan agreement contract address
+   * @param signer The ethers.js signer
+   * @returns Promise resolving to transaction result
+   */
+  public static async payRental(
+    address: string,
+    signer: ethers.Signer
+  ): Promise<TransactionResult> {
+    try {
+      const contract = this.getContractInstance(address, signer);
+      
+      // Set up event listeners for debugging
+      contract.on("StatusChanged", (oldStatus: any, newStatus: any) => {
+        console.log("📢 StatusChanged event:", { oldStatus: Number(oldStatus), newStatus: Number(newStatus) });
+      });
+      
+      contract.on("LoanStarted", (amount: any, collateral: any) => {
+        console.log("📢 LoanStarted event:", { 
+          amount: ethers.formatEther(amount), 
+          collateral: ethers.formatEther(collateral)
+        });
+      });
+      
+      // Get the rental contract address
+      const rentalAddress = await contract.rentalContract();
+      
+      // Set up a minimal interface for RentalAgreement to watch its events
+      const rentalABI = [
+        "event RentPaid(uint256 month, uint256 amount, uint256 dueAmount)",
+        "function receiveRentFromLoan() external payable"
+      ];
+      
+      const rentalContract = new ethers.Contract(rentalAddress, rentalABI, signer);
+      
+      // Watch for RentPaid events on rental contract
+      rentalContract.on("RentPaid", (month: any, amount: any, dueAmount: any) => {
+        console.log("📢 RentPaid event from rental contract:", {
+          month: Number(month),
+          amount: ethers.formatEther(amount),
+          dueAmount: ethers.formatEther(dueAmount)
+        });
+      });
+      
+      console.log("Starting payRental transaction");
+      
+      // Send transaction
+      const tx = await contract.payRental({
+        gasLimit: 30000000 // Estimated gas limit
+      });
+      
+      console.log("Transaction sent:", tx.hash);
+      
+      // Wait for transaction to be mined
+      console.log("Waiting for transaction confirmation...");
+      const receipt = await tx.wait();
+      console.log("Transaction confirmed in block:", receipt.blockNumber);
+      
+      // Clean up event listeners
+      contract.removeAllListeners();
+      rentalContract.removeAllListeners();
+      
+      return {
+        success: true,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber
+      };
+    } catch (error) {
+      console.error('Error paying rental:', error);
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
   }
 } 

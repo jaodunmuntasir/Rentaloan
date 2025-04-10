@@ -118,6 +118,13 @@
   },
   {
     "inputs": [],
+    "name": "activateLoan",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "borrower",
     "outputs": [
       {
@@ -402,6 +409,13 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "payRental",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

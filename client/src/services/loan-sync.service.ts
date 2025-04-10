@@ -136,4 +136,126 @@ export class LoanSyncService {
       };
     }
   }
+  
+  /**
+   * Activate a loan and record the transaction in the backend
+   * 
+   * @param user Current user
+   * @param contractAddress Loan agreement contract address
+   * @param signer Ethers signer
+   * @returns Synchronized result
+   */
+  public static async activateLoan(
+    user: AppUser,
+    contractAddress: string,
+    signer: ethers.Signer
+  ): Promise<SyncResult> {
+    try {
+      // Step 1: Execute blockchain transaction
+      const txResult = await LoanAgreementService.activateLoan(contractAddress, signer);
+      
+      // Step 2: If blockchain transaction failed, return early
+      if (!txResult.success) {
+        return {
+          success: false,
+          syncedWithBackend: false,
+          error: txResult.error
+        };
+      }
+      
+      // Step 3: Record transaction in backend
+      const backendResult = await LoanApi.updateLoanStatus(
+        user, 
+        contractAddress, 
+        2 // Status.ACTIVE = 2
+      );
+      
+      // Also record the transaction details
+      if (txResult.transactionHash) {
+        await LoanApi.recordTransaction(
+          user,
+          contractAddress,
+          txResult.transactionHash,
+          'fund', // closest available type
+          { status: 2 }
+        );
+      }
+      
+      return {
+        success: true,
+        transactionHash: txResult.transactionHash,
+        blockNumber: txResult.blockNumber,
+        syncedWithBackend: backendResult.success,
+        backendError: backendResult.success ? undefined : backendResult.error
+      };
+    } catch (error) {
+      console.error('Error in activate loan sync operation:', error);
+      return {
+        success: false,
+        syncedWithBackend: false,
+        error: (error as Error).message
+      };
+    }
+  }
+  
+  /**
+   * Pay rental with loan amount and record the transaction in the backend
+   * 
+   * @param user Current user
+   * @param contractAddress Loan agreement contract address
+   * @param signer Ethers signer
+   * @returns Synchronized result
+   */
+  public static async payRental(
+    user: AppUser,
+    contractAddress: string,
+    signer: ethers.Signer
+  ): Promise<SyncResult> {
+    try {
+      // Step 1: Execute blockchain transaction
+      const txResult = await LoanAgreementService.payRental(contractAddress, signer);
+      
+      // Step 2: If blockchain transaction failed, return early
+      if (!txResult.success) {
+        return {
+          success: false,
+          syncedWithBackend: false,
+          error: txResult.error
+        };
+      }
+      
+      // Step 3: Record transaction in backend
+      const backendResult = await LoanApi.updateLoanStatus(
+        user, 
+        contractAddress, 
+        3 // Status.PAID = 3
+      );
+      
+      // Also record the transaction details
+      if (txResult.transactionHash) {
+        await LoanApi.recordTransaction(
+          user,
+          contractAddress,
+          txResult.transactionHash,
+          'fund', // closest available type
+          { status: 3 }
+        );
+      }
+      
+      return {
+        success: true,
+        transactionHash: txResult.transactionHash,
+        blockNumber: txResult.blockNumber,
+        syncedWithBackend: backendResult.success,
+        backendError: backendResult.success ? undefined : backendResult.error
+      };
+    } catch (error) {
+      console.error('Error in pay rental sync operation:', error);
+      return {
+        success: false,
+        syncedWithBackend: false,
+        error: (error as Error).message
+      };
+    }
+  }
 } 
