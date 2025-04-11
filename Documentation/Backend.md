@@ -152,19 +152,9 @@ This model maintains a `contractAddress` field that references the on-chain smar
 
 ### Blockchain Integration
 
-Our blockchain integration layer uses Ethers.js to interact with Ethereum smart contracts. The system defines TypeScript interfaces for each contract type, ensuring type safety when working with contract methods:
+Our blockchain integration layer uses Ethers.js to interact with Ethereum smart contracts. The system defines TypeScript interfaces for each contract type, ensuring type safety when working with contract methods.
 
-```typescript
-interface RentalAgreementContract extends ethers.BaseContract {
-  paySecurityDeposit(overrides?: { value: ethers.BigNumberish }): Promise<ethers.ContractTransactionResponse>;
-  payRent(month: number, paymentMethod: number, overrides?: { value: ethers.BigNumberish }): Promise<ethers.ContractTransactionResponse>;
-  skipRent(month: number): Promise<ethers.ContractTransactionResponse>;
-  extendContractDuration(additionalMonths: number): Promise<ethers.ContractTransactionResponse>;
-  getContractDetails(): Promise<any[]>;
-}
-```
-
-The blockchain service provides methods to interact with these contracts, handling both read operations (querying state) and write operations (submitting transactions).
+The blockchain service provides methods to interact with these contracts, handling read operations (querying state).
 
 ## Event Processing System
 
@@ -175,56 +165,6 @@ The event service:
 1. Initializes listeners for factory contracts (RentalAgreementFactory and LoanAgreementFactory)
 2. Sets up listeners for existing agreements in the database
 3. Processes events such as agreement creation, payment processing, and status changes
-
-For example, when a new rental agreement is created, the event service processes it as follows:
-
-```typescript
-rentalFactoryContract.on('AgreementCreated', async (contractAddress, landlord, renter, name, event) => {
-  console.log(`New rental agreement created: ${contractAddress}`);
-  
-  try {
-    // Check if the agreement already exists in the database
-    const existingAgreement = await RentalAgreement.findOne({
-      where: { contractAddress }
-    });
-    
-    if (!existingAgreement) {
-      // Find the user IDs for landlord and renter
-      const landlordUser = await User.findOne({
-        where: { walletAddress: landlord.toLowerCase() }
-      });
-      
-      const renterUser = await User.findOne({
-        where: { walletAddress: renter.toLowerCase() }
-      });
-      
-      if (!landlordUser || !renterUser) {
-        console.error(`Landlord or renter user not found for agreement ${contractAddress}`);
-        return;
-      }
-      
-      // Create a new rental agreement in the database
-      await RentalAgreement.create({
-        contractAddress,
-        landlordId: landlordUser.id,
-        renterId: renterUser.id,
-        name,
-        status: RentalAgreementStatus.INITIALIZED,
-        startDate: null,
-        createdDate: new Date(),
-        txHash: event.transactionHash
-      });
-      
-      console.log(`Rental agreement ${contractAddress} added to database`);
-    }
-    
-    // Set up listeners for the new rental agreement
-    listenToRentalAgreementEvents(contractAddress);
-  } catch (error) {
-    console.error(`Error processing AgreementCreated event for ${contractAddress}:`, error);
-  }
-});
-```
 
 This approach ensures that the database state remains synchronized with blockchain state, providing a consistent view of agreements and transactions.
 
@@ -256,40 +196,7 @@ Our API follows RESTful principles organized around business domains rather than
 3. **/api/loan**: Handles loan requests, offers, and management
 4. **/api/user**: Provides user-specific data, including dashboard information
 
-Each API endpoint uses middleware for authentication and follows consistent response patterns. For example, our user dashboard endpoint aggregates multiple types of data into a single response:
-
-```typescript
-router.get('/dashboard', authenticate, async (req: Request, res: Response) => {
-  try {
-    const user = await User.findOne({ where: { firebaseId: req.user?.uid } });
-    
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
-    // Fetch user's rental agreements, loan agreements, loan requests, etc.
-    // ...
-    
-    // Return aggregated data
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.get('name') || '',
-        walletAddress: user.walletAddress
-      },
-      rentalAgreements,
-      loanAgreements,
-      loanRequests,
-      loanOffers,
-      payments
-    });
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-```
+Each API endpoint uses middleware for authentication and follows consistent response patterns. For example, our user dashboard endpoint aggregates multiple types of data into a single response.
 
 This API design abstracts the complexity of blockchain operations behind familiar REST endpoints, making it easier for the frontend to interact with both database and blockchain data.
 
