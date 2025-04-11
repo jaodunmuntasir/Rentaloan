@@ -279,24 +279,6 @@ The rental agreement creation workflow exemplifies our approach to abstracting b
 
 The workflow begins with a form-based interface that collects essential rental agreement details, including tenant information, rental duration, security deposit amount, and monthly rent. This interface uses familiar web form patterns with real-time validation, making it accessible to users without blockchain knowledge. Behind this familiar interface, however, the system performs complex calculations to determine appropriate blockchain parameters such as grace periods and deposit requirements.
 
-```
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| Collect Agreement |---->| Prepare Contract  |---->| Deploy Contract   |
-|     Details       |     |   Parameters      |     | to Blockchain     |
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-                                                          |
-                                                          v
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| Manage Agreement  |<----| Confirmation      |<----| Transaction       |
-|                   |     | Success           |     | Processing        |
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-```
-*Figure 1: Rental Agreement Creation Workflow*
-
 Once the user submits the form, the system transitions to the blockchain interaction phase. Here, we implement a multi-step process that guides the user through the technical aspects of contract deployment. First, the system prepares the transaction by estimating gas costs and constructing the contract deployment parameters. Next, it presents a confirmation dialog that explains the blockchain aspects in user-friendly terms, including the estimated transaction cost and what will happen on the blockchain.
 
 Upon confirmation, the system executes the transaction and displays a detailed status interface that tracks the transaction through the blockchain's confirmation process. This interface implements our Asynchronous Component Pattern, showing real-time progress, estimated completion time, and a transaction hash that users can use to verify the operation independently.
@@ -308,42 +290,6 @@ The workflow concludes with a redirect to the newly created agreement's detail p
 ### Loan Request and Offer Workflow
 
 The loan request and offer workflow presents unique architectural challenges due to its multi-party nature and the need to coordinate database state with blockchain state. This workflow involves three distinct actors (renter, potential lenders, and the blockchain) and must manage a marketplace of offers before ultimately deploying a loan contract.
-
-```
-                    Renter                                   Lender
-                       |                                       |
-+-------------------+  |  +-------------------+                |
-|                   |  |  |                   |                |
-| Create Loan       |--|->| Validate          |                |
-| Request           |     | Collateral        |                |
-|                   |     |                   |                |
-+-------------------+     +-------------------+                |
-                            |                                  |
-                            v                                  |
-                    +-------------------+     +-------------------+
-                    |                   |     |                   |
-                    | Store Request     |---->| Browse Available  |
-                    | in Database       |     | Loan Requests     |
-                    |                   |     |                   |
-                    +-------------------+     +-------------------+
-                            ^                        |
-                            |                        v
-+-------------------+       |              +-------------------+
-|                   |       |              |                   |
-| Compare and       |<------|--------------|  Make Loan        |
-| Review Offers     |                      |  Offer            |
-|                   |                      |                   |
-+-------------------+                      +-------------------+
-        |
-        v
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| Accept Offer      |---->| Deploy Loan       |---->| Lock Collateral   |
-|                   |     | Contract          |     | in Rental Contract|
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-```
-*Figure 2: Loan Request and Offer Workflow*
 
 We've implemented this workflow as a hybrid system that uses traditional database storage for the marketplace phase and blockchain transactions for the final agreement creation. This hybrid approach optimizes for user experience and cost efficiency by keeping lower-stakes interactions (browsing requests, making offers) off-chain while ensuring the final financial agreement has the security and immutability of the blockchain.
 
@@ -360,32 +306,6 @@ Throughout this process, we maintain synchronization between the database state 
 ### Payment Processing Workflow
 
 The payment processing workflow, used for both rent payments and loan repayments, demonstrates our approach to handling financial transactions on the blockchain. This workflow must ensure accurate payment amounts, provide clear confirmation and receipt of payment, and maintain an auditable history of all transactions.
-
-```
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| View Payment      |---->| Initiate Payment  |---->| Validate Payment  |
-| Status & Details  |     |                   |     | Requirements      |
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-                                                          |
-                                                          v
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| Update UI &       |<----| Generate Payment  |<----| Confirm Payment   |
-| Database Records  |     | Receipt           |     | Details           |
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-        ^                                                  |
-        |                                                  v
-+-------------------+     +-------------------+     +-------------------+
-|                   |     |                   |     |                   |
-| Error Recovery    |<----| Error Handling    |<----|Submit Blockchain  |
-| Paths             |     | & Feedback        |     | Transaction       |
-|                   |     |                   |     |                   |
-+-------------------+     +-------------------+     +-------------------+
-```
-*Figure 3: Payment Processing Workflow*
 
 The workflow begins on a detail page (either rental agreement or loan agreement) that displays the current payment status, including amount due, due date, and payment history. This interface integrates blockchain-derived data (current contract state) with user-friendly presentations of payment schedules and options. For users with multiple payment obligations, we also provide aggregated views that show all upcoming payments across different agreements.
 

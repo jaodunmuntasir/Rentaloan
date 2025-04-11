@@ -1,5 +1,5 @@
 import { Sequelize } from 'sequelize';
-import db from './models';
+import db from '../models';
 
 // Database migration to remove role column
 const migrateUserTable = async () => {
