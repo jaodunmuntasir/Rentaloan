@@ -1,250 +1,273 @@
-# User Documentation: Interaction Analysis and Operational Workflows
+# User Guide: Blockchain-Based Rental Loan System
 
-## Abstract
+## Welcome to the System
 
-This document presents a structured analysis of user interaction patterns and operational workflows within the Blockchain-Based Rental Loan System. Through systematic examination of role-specific interfaces and task-oriented processes, we provide a theoretical foundation for understanding user engagement with decentralized financial applications. The documentation emphasizes methodological approaches to system utilization across different stakeholder categories and analyzes interaction paradigms through the lens of Human-Computer Interaction principles.
+This guide will help you navigate our Blockchain-Based Rental Loan System whether you're a landlord, renter, or lender. You'll find step-by-step instructions for all key features with minimal technical jargon.
 
-## 1. Introduction
+## Getting Started
 
-The Blockchain-Based Rental Loan System represents a novel intersection between traditional rental agreements and decentralized finance. This documentation analyzes user interaction patterns and provides structured workflows for system engagement. Rather than serving as a simple instruction manual, this analysis examines the theoretical underpinnings of user interaction with blockchain-based financial applications and provides a methodological framework for system utilization.
+### Creating Your Account
+
+1. Click "Sign Up" on the homepage
+2. Enter your email address and create a password
+3. Check your email and click the verification link
+4. Complete your profile with your name and contact information
 
-The system architecture employs a client-server model with blockchain integration, requiring distinct interaction patterns for different user roles. This documentation categorizes these patterns according to stakeholder classification and task-oriented processes, providing both role-based and functionality-based analysis frameworks.
+### Connecting Your Wallet
 
-## 2. System Engagement Methodology
+1. Click "Connect Wallet" in the top-right corner
+2. Select MetaMask from the wallet options
+3. Approve the connection request in your MetaMask popup
+4. Your wallet address will appear in the header when successfully connected
+
+### Dashboard Overview
+
+After logging in, you'll see your personalized dashboard with:
+- Navigation menu on the left
+- Quick action buttons in the center
+- Notifications and account options in the top-right
+- Active agreements and requests displayed as cards
+
+## For Landlords
+
+### Creating a Rental Agreement
+
+1. From your dashboard, click "Create Rental Agreement"
+2. Fill in property details:
+   - Address
+   - Number of bedrooms/bathrooms
+   - Amenities
+3. Set rental terms:
+   - Monthly rent amount
+   - Lease duration
+   - Payment due date
+4. Specify security deposit amount
+5. Review all details on the confirmation page
+6. Click "Deploy Agreement" and approve the transaction in your wallet
+
+### Managing Your Properties
+
+1. Go to "My Properties" in the side menu
+2. View all your rental agreements in one place
+3. Filter by status: Available, Occupied, or Completed
+4. Click on any property card to view details
+
+### Tracking Payments
+
+1. Select a property from "My Properties"
+2. Go to the "Payments" tab
+3. View payment status with color indicators:
+   - Green: Paid
+   - Yellow: Upcoming
+   - Red: Overdue
+4. Click on any payment to see transaction details
+
+### Terminating an Agreement
+
+1. Open the specific agreement from "My Properties"
+2. Click "Terminate Agreement" at the bottom of the page
+3. Select a reason for termination
+4. Confirm your decision
+5. Approve the blockchain transaction in your wallet
+
+## For Renters
+
+### Finding a Rental
+
+1. Click "Browse Rentals" in the navigation menu
+2. Use filters to narrow your search:
+   - Location
+   - Price range
+   - Number of bedrooms
+   - Amenities
+3. Click on any listing to view full details
+4. Use the "Contact Landlord" button if you have questions
+
+### Signing a Rental Agreement
+
+1. From the rental details page, click "Rent This Property"
+2. Review all terms carefully
+3. Click "Sign Agreement" 
+4. Pay the security deposit by approving the transaction in your wallet
+5. You'll receive confirmation once the transaction is complete
+
+### Paying Rent
+
+1. Go to "My Rentals" in the navigation menu
+2. Select the property you need to pay rent for
+3. Click "Make Payment" on the rent due notification
+4. Confirm the amount and approve the transaction in your wallet
+5. A receipt will be generated automatically
+
+### Requesting a Loan
+
+1. From "My Rentals," select the property for which you need financial assistance
+2. Click "Request Loan" button
+3. Complete the loan request form:
+   - Amount needed (typically the rent amount)
+   - Loan duration
+   - Proposed interest rate
+4. Review your request details
+5. Click "Submit Request" to publish it to the marketplace
+
+### Managing Loan Offers
+
+1. Go to "My Loan Requests" in the navigation menu
+2. View all offers received for your loan requests
+3. Compare offers side-by-side:
+   - Interest rates
+   - Repayment terms
+   - Lender ratings
+4. Select the best offer and click "Accept"
+5. Approve the contract creation in your wallet
+
+### Repaying Loans
+
+1. Navigate to "My Loans" in the menu
+2. Select the active loan you want to repay
+3. View your payment schedule
+4. Click "Make Payment" for the current due date
+5. Approve the transaction in your wallet
+6. Track your remaining balance after payment processes
+
+## For Lenders
+
+### Browsing Loan Requests
+
+1. Click "Loan Marketplace" in the navigation menu
+2. Browse available loan requests
+3. Use filters to find suitable opportunities:
+   - Loan amount
+   - Duration
+   - Interest rate
+   - Renter history
+
+### Viewing Request Details
+
+1. Click on any loan request card
+2. Review detailed information:
+   - Rental property details
+   - Rental agreement verification
+   - Borrower repayment history (if available)
+   - Loan terms
 
-### 2.1 Initial System Access
+### Creating a Loan Offer
 
-The system employs a Firebase authentication mechanism requiring email verification. Users must complete the following procedural steps to establish system access:
+1. From the loan request details page, click "Make Offer"
+2. Set your terms:
+   - Interest rate (can match or improve upon requested rate)
+   - Any special conditions
+3. Review your offer
+4. Click "Submit Offer" and approve the transaction
 
-1. Account creation with valid email credentials
-2. Email verification through authentication link
-3. Profile completion with personal information
-4. Wallet initialization or connection
+### Managing Your Loans
 
-The wallet initialization process varies based on the implemented provider:
-- MetaMask integration requires approval of connection requests
-- The system validates wallet ownership through signature verification
+1. Go to "My Loans" in the navigation menu
+2. View all your active loans
+3. Monitor repayment status with visual indicators
+4. Click on any loan to view complete payment history
+5. Set up notification preferences for payment alerts
 
-Dashboard navigation utilizes a role-based visibility system, presenting relevant components based on user classification and active agreements. The interface employs a card-based organization structure with action-oriented navigation elements.
+## Common Tasks
 
-### 2.2 Interaction Paradigms
-
-The system implements several core interaction paradigms that remain consistent across different workflows:
-
-1. **Transaction Confirmation Pattern**: All blockchain transactions require explicit user confirmation through wallet interaction, presenting transaction details and gas estimation before execution.
-
-2. **Status-Based Visibility Control**: Interface elements adapt based on agreement status, showing only contextually relevant actions.
-
-3. **Form-Based Data Entry**: Structured input validation with immediate feedback mechanisms ensures data integrity.
-
-4. **Two-Phase Commitment**: Critical operations employ a two-phase commitment pattern, requiring confirmation after initial intent expression.
-
-5. **Notification-Based State Updates**: System state changes trigger notification elements to inform users of relevant events.
-
-## 3. Role-Based Interaction Analysis
-
-### 3.1 Landlord Interaction Framework
-
-Landlords engage with the system primarily through agreement creation and management workflows. The landlord interface emphasizes property configuration, payment tracking, and agreement lifecycle management.
-
-#### 3.1.1 Agreement Creation Methodology
-
-The creation of rental agreements follows a structured data entry sequence:
-
-1. Property details specification through categorical form elements
-2. Rental terms configuration including duration and payment parameters
-3. Security deposit requirements definition
-4. Contract deployment confirmation through wallet interaction
-
-The system employs a preview mechanism before deployment, allowing validation of agreement parameters before blockchain transaction execution. This pattern reduces the likelihood of error correction transactions.
-
-#### 3.1.2 Rental Management Workflow
-
-Active agreement management utilizes a status-based dashboard with filtering capabilities. For each agreement, landlords can:
-
-- Track payment status through visual indicators
-- Initiate termination processes when contractually permitted
-- View comprehensive payment history with transaction verification
-- Manage security deposit returns based on agreement conditions
-
-Termination workflows employ the two-phase commitment pattern, requiring explicit confirmation to prevent accidental status changes.
-
-### 3.2 Renter/Borrower Interaction Framework
-
-Renters interact with both rental agreements and loan request processes. This dual functionality creates a complex interaction pattern requiring clear delineation between rental obligations and financing options.
-
-#### 3.2.1 Rental Engagement Process
-
-The rental engagement workflow consists of:
-
-1. Agreement discovery through filtered listing views
-2. Agreement detail examination with terms verification
-3. Security deposit submission through wallet transaction
-4. Recurring rent payment execution based on agreement schedule
-
-The interface presents payment deadlines with visual urgency indicators and employs calendar integration for schedule management.
-
-#### 3.2.2 Loan Request Methodology
-
-The loan request process implements a structured data specification pattern:
-
-1. Amount determination based on rental obligation parameters
-2. Duration specification with repayment schedule preview
-3. Interest rate proposal with market comparison indicators
-4. Request submission with cancellation options
-
-The system presents loan requests in a marketplace-style interface, allowing interaction with incoming offers through comparison tools that highlight terms differences.
-
-#### 3.2.3 Loan Management Workflow
-
-Active loan management employs a timeline-based visualization showing:
-
-- Upcoming payment deadlines with amount breakdown
-- Payment history with blockchain verification links
-- Remaining obligation calculations
-- Early repayment simulation tools
-
-The repayment process implements the transaction confirmation pattern with fee estimation and balance verification steps.
-
-### 3.3 Lender Interaction Framework
-
-Lenders interact primarily with the loan marketplace and active loan management interfaces. The interaction patterns emphasize risk assessment tools and repayment tracking.
-
-#### 3.3.1 Loan Marketplace Engagement
-
-The marketplace interaction follows a discovery-evaluation-action pattern:
-
-1. Filtering available requests based on amount, duration, and rate parameters
-2. Detailed evaluation of individual requests with rental agreement verification
-3. Offer creation with competitive terms analysis
-4. Offer management including modification and cancellation options
-
-The interface employs comparative visualization techniques to position offers against existing alternatives, facilitating competitive positioning.
-
-#### 3.3.2 Active Loan Oversight
-
-The active loan management interface implements a portfolio approach with:
-
-- Aggregated exposure metrics
-- Individual loan performance indicators
-- Payment receipt verification
-- Default risk assessment visualizations
-
-The system provides notification mechanisms for payment receipts and approaching deadlines, enabling proactive portfolio management.
-
-## 4. Functionality-Based Workflow Analysis
-
-### 4.1 Blockchain Integration Methodology
-
-The system's blockchain integration requires specific user interaction patterns for effective operation:
-
-1. **Transaction Initiation**: Initiated through action buttons triggering wallet connection
-2. **Parameter Confirmation**: System displays transaction parameters for user verification
-3. **Fee Adjustment Options**: Users can modify gas parameters when supported by wallet provider
-4. **Confirmation Interaction**: Wallet presents confirmation interface requiring explicit approval
-5. **Transaction Monitoring**: System provides feedback during transaction processing
-6. **Receipt Verification**: Transaction completion generates verifiable receipt with blockchain references
-
-Users must understand gas fee dynamics and transaction finality concepts. The interface provides explanatory elements for blockchain-specific concepts to facilitate understanding.
-
-### 4.2 Rental Agreement Lifecycle Management
-
-The rental agreement lifecycle follows a state machine model with specific transition points requiring user interaction:
-
-1. **Creation State**: Initiated by landlord through property specification
-2. **Available State**: Published agreement awaiting renter engagement
-3. **Active State**: Occupied agreement with ongoing payment obligations
-4. **Termination Process**: Multi-step workflow requiring mutual acknowledgment
-5. **Completed State**: Fulfilled agreement with historical reference
-
-Each state transition requires specific interaction patterns and presents different interface elements. The system employs a visual state indicator showing current position within the lifecycle.
-
-### 4.3 Loan Request-Offer Marketplace Dynamics
-
-The loan marketplace implements a bid-ask matching system with specific interaction requirements:
-
-1. **Request Creation**: Structured specification of loan parameters by borrowers
-2. **Discovery Mechanism**: Search and filter tools for finding relevant requests/offers
-3. **Offer Submission**: Counterparty terms proposal with competitive positioning
-4. **Comparison Tools**: Side-by-side evaluation of multiple offers
-5. **Acceptance Workflow**: Selection and confirmation of preferred terms
-6. **Cancellation Options**: Request or offer withdrawal when permitted
-
-The marketplace interface employs sorting mechanisms and highlights new or updated items to facilitate effective matching.
-
-### 4.4 Loan Management and Repayment Systems
-
-The loan management workflow implements a scheduled obligation system:
-
-1. **Repayment Schedule Visualization**: Calendar-based view of upcoming obligations
-2. **Payment Initiation**: Streamlined process for executing scheduled payments
-3. **Receipt Verification**: Confirmation of payment recording on blockchain
-4. **History Tracking**: Comprehensive view of previous payment activities
-5. **Early Repayment Tools**: Calculation and execution of principal reduction options
-
-The interface provides clear differentiation between required minimum payments and optional accelerated repayment options.
-
-## 5. Cross-Role Interaction Patterns
-
-### 5.1 Transaction Verification Methodology
-
-All users require access to transaction verification tools. The system implements a consistent verification pattern:
-
-1. Transaction ID presentation with blockchain explorer links
-2. Status indicators showing confirmation progress
-3. Receipt generation with cryptographic verification options
-4. Historical archiving with search capabilities
-
-The verification interface employs standardized iconography for status representation and consistent terminology across different transaction types.
-
-### 5.2 Activity Monitoring Framework
-
-The activity tracking system provides temporal organization of system events:
-
-1. Chronological presentation of user-specific activities
-2. Filtering options for isolating transaction types
-3. Notification mechanisms for new activities
-4. Detailed expansion of individual items
-
-The interface implements infinite scrolling with progressive loading to manage potentially large activity histories efficiently.
-
-### 5.3 Profile Management Workflow
-
-The profile management interface centralizes user-specific configurations:
-
-1. Personal information management with privacy controls
-2. Notification preferences configuration
-3. Wallet connection management
-4. Authentication settings including password management
-
-The interface implements a sectioned approach with clear delineation between different configuration categories.
-
-## 6. Exception Handling and Troubleshooting
-
-### 6.1 Error Classification and Resolution
-
-The system categorizes errors into distinct types with specific resolution methodologies:
-
-1. **Validation Errors**: Form-level input validation with inline correction guidance
-2. **Transaction Failures**: Blockchain-level rejections with cause identification
-3. **Network Connectivity Issues**: Detection and retry mechanisms
-4. **Contract Interaction Failures**: Smart contract exception handling with explanation
-
-Each error type presents specific recovery paths with clear user guidance. The error presentation employs contextual positioning and severity-based styling.
-
-### 6.2 Common Resolution Pathways
-
-Frequent issues follow standardized resolution patterns:
-
-1. **Insufficient Gas**: Fee adjustment guidance with estimation tools
-2. **Rejected Transactions**: Verification of parameters and retry options
-3. **Invalid Input**: Field-specific validation with format requirements
-4. **State Synchronization**: Refresh mechanisms for resolving display inconsistencies
-
-The interface provides progressive disclosure of technical details for users requiring additional information for problem resolution.
-
-## Conclusion
-
-This documentation provides a structured analysis of user interaction patterns within the Blockchain-Based Rental Loan System. By examining both role-specific workflows and cross-cutting functionality patterns, it establishes a methodological framework for system engagement. The analysis highlights the integration challenges between traditional financial processes and blockchain technology, documenting the interaction paradigms developed to address these challenges.
-
-Rather than focusing solely on procedural instructions, this documentation emphasizes the theoretical underpinnings of effective user interaction with decentralized applications. Through careful examination of workflow structures, state transitions, and interaction patterns, it provides a foundation for understanding the human-computer interaction aspects of blockchain-based financial systems. 
+### Checking Transaction History
+
+1. Click on your profile icon in the top-right corner
+2. Select "Transaction History"
+3. View all blockchain transactions organized by date
+4. Click any transaction to see details including:
+   - Transaction hash
+   - Status
+   - Block confirmation
+   - Gas fees paid
+
+### Updating Your Profile
+
+1. Click your profile icon
+2. Select "Profile Settings"
+3. Update your information:
+   - Personal details
+   - Contact information
+   - Notification preferences
+4. Click "Save Changes"
+
+### Managing Notifications
+
+1. Go to "Profile Settings"
+2. Select the "Notifications" tab
+3. Choose which alerts you want to receive:
+   - Payment reminders
+   - New loan offers
+   - Agreement updates
+   - System announcements
+4. Set your preferred notification method (email, in-app, or both)
+
+## Troubleshooting
+
+### Transaction Failed
+
+If your transaction fails:
+1. Check your wallet balance to ensure you have sufficient funds
+2. Verify you have enough ETH to cover gas fees
+3. Try adjusting the gas price if the network is congested
+4. Wait a few minutes and try again
+
+### Can't See Your Property/Rental
+
+If your property or rental isn't appearing:
+1. Refresh the page
+2. Verify your wallet is connected correctly
+3. Check if the transaction was successfully confirmed on the blockchain
+4. Contact support if the issue persists
+
+### Error Messages
+
+Common error messages and solutions:
+
+**"Insufficient funds"**
+- Add more ETH to your wallet
+
+**"Transaction underpriced"**
+- Increase the gas price and try again
+
+**"Invalid input"**
+- Check that all form fields are completed correctly
+
+**"Network error"**
+- Check your internet connection
+- Refresh the page
+- Try again later
+
+## Blockchain Basics
+
+### Understanding Gas Fees
+
+Gas fees are transaction processing costs paid to the Ethereum network. They vary based on:
+- Network congestion
+- Transaction complexity
+- Processing speed priority
+
+You can often adjust gas prices when confirming transactions in your wallet.
+
+### Transaction Confirmations
+
+After approving a transaction:
+1. Your request enters the blockchain's processing queue
+2. Wait for confirmation (typically 1-5 minutes)
+3. The application will update once confirmation is complete
+4. More confirmations mean greater transaction security
+
+### Wallet Security
+
+Keep your account secure by:
+- Never sharing your wallet's private key or seed phrase
+- Logging out when using shared computers
+- Verifying transaction details before approval
+- Using a hardware wallet for large transactions
+
+## Need More Help?
+
+If you encounter any issues not covered in this guide, please:
+- Check our FAQ section
+- Search for answers in our knowledge base
+- Reach out to fellow users in our community forum 
