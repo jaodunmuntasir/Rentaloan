@@ -94,23 +94,6 @@
    - [ ] `test('updates contract data on events')`
    - [ ] `test('handles contract initialization errors')`
 
-### Utility Functions
-
-8. **`src/utils/__tests__/dateUtils.test.ts`**
-   - [ ] `test('formatTimestamp returns correct format')`
-   - [ ] `test('calculateMonthsBetween works correctly')`
-   - [ ] `test('getNextPaymentDate calculates correctly')`
-
-9. **`src/utils/__tests__/formatUtils.test.ts`**
-   - [ ] `test('formatCurrency shows correct currency format')`
-   - [ ] `test('formatAddress shortens Ethereum addresses')`
-   - [ ] `test('formatPercentage shows rates correctly')`
-
-10. **`src/utils/__tests__/validationUtils.test.ts`**
-    - [ ] `test('isValidEthAddress validates Ethereum addresses')`
-    - [ ] `test('isValidAmount checks if amount is valid')`
-    - [ ] `test('validateForm checks all required fields')`
-
 ### Page Components
 
 11. **`src/pages/__tests__/Login.test.tsx`**
@@ -147,12 +130,6 @@
     - [ ] `test('shows wallet balance in ETH')`
     - [ ] `test('handles connect wallet button click')`
     - [ ] `test('displays appropriate UI when not connected')`
-
-16. **`src/components/forms/__tests__/LoanRequestForm.test.tsx`**
-    - [ ] `test('updates values on input changes')`
-    - [ ] `test('validates minimum and maximum values')`
-    - [ ] `test('calculates repayment details on change')`
-    - [ ] `test('submits form with valid data')`
 
 ## Run Tests
 
