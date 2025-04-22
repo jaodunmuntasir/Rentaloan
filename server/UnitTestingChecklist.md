@@ -96,16 +96,7 @@
 
 ```bash
 # Run all tests
-npm test
-
-# Run tests with coverage report
-npm test -- --coverage
-
-# Run specific test file
-npm test -- routes/__tests__/auth.test.ts
-
-# Run tests in watch mode during development
-npm test -- --watch
+npm run test:all
 ```
 
 ## Test Patterns
@@ -151,44 +142,6 @@ describe('Auth Routes', () => {
         email: 'test@example.com',
         password: 'password123'
       });
-    });
-  });
-});
-```
-
-### Service Test Pattern
-```typescript
-import { WalletService } from '../wallet.service';
-import { ethers } from 'ethers';
-import { User } from '../../models/user.model';
-
-// Mock dependencies
-jest.mock('ethers');
-jest.mock('../../models/user.model');
-
-describe('WalletService', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  describe('getAvailableWallet', () => {
-    test('finds unused wallet', async () => {
-      // Arrange
-      const mockAccounts = [
-        { address: '0x123' },
-        { address: '0x456' }
-      ];
-      (ethers.JsonRpcProvider.prototype.listAccounts as jest.Mock).mockResolvedValue(mockAccounts);
-      (User.findAll as jest.Mock).mockResolvedValue([
-        { walletAddress: '0x123' }
-      ]);
-
-      // Act
-      const result = await WalletService.getAvailableWallet();
-
-      // Assert
-      expect(result).toBe('0x456');
-      expect(ethers.JsonRpcProvider).toHaveBeenCalledWith('http://localhost:8545');
     });
   });
 });
