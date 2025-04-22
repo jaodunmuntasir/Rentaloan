@@ -175,7 +175,7 @@ const listenToLoanFactoryEvents = () => {
           contractAddress,
           lenderId: lenderUser.id,
           borrowerId: borrowerUser.id,
-          status: LoanAgreementStatus.CREATED,
+          status: LoanAgreementStatus.INITIALIZED,
           startDate: null,
           createdDate: new Date(),
           txHash: event.transactionHash
@@ -446,7 +446,7 @@ const listenToLoanAgreementEvents = async (contractAddress: string) => {
           }
           
           // Update loan status if not already active
-          if (loan.status === LoanAgreementStatus.CREATED) {
+          if (loan.status === LoanAgreementStatus.INITIALIZED) {
             await loan.update({
               status: LoanAgreementStatus.ACTIVE,
               startDate: new Date()
@@ -512,7 +512,7 @@ const listenToLoanAgreementEvents = async (contractAddress: string) => {
             const status = await loanContract.getStatus();
             if (Number(status) === 1) { // 1 = CLOSED in the contract
               await loan.update({
-                status: LoanAgreementStatus.CLOSED
+                status: LoanAgreementStatus.COMPLETED
               });
               console.log(`Loan agreement ${contractAddress} marked as closed`);
             }
@@ -538,7 +538,7 @@ const listenToLoanAgreementEvents = async (contractAddress: string) => {
         
         if (loan) {
           await loan.update({
-            status: LoanAgreementStatus.CLOSED
+            status: LoanAgreementStatus.COMPLETED
           });
           
           console.log(`Loan agreement ${contractAddress} marked as closed`);

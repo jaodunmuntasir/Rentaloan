@@ -65,20 +65,6 @@
    - [ ] `test('GET /api/loan/agreements returns loan agreement list')`
    - [ ] `test('validates loan parameters on creation')`
 
-### Middleware
-
-5. **`middleware/__tests__/auth.test.ts`**
-   - [ ] `test('authenticate middleware verifies valid token')`
-   - [ ] `test('authenticate middleware rejects invalid token')`
-   - [ ] `test('authenticate middleware attaches user to request')`
-   - [ ] `test('authenticate middleware handles missing token')`
-   - [ ] `test('authenticate middleware handles Firebase errors')`
-
-6. **`middleware/__tests__/validation.test.ts`**
-   - [ ] `test('validateRequest checks required fields')`
-   - [ ] `test('validateRequest sanitizes inputs')`
-   - [ ] `test('validateRequest returns 400 for invalid data')`
-
 ### Models
 
 7. **`models/__tests__/user.model.test.ts`**
@@ -98,50 +84,9 @@
    - [ ] `test('Loan model calculates interest correctly')`
    - [ ] `test('Loan model tracks status transitions')`
 
-### Services
-
-10. **`services/__tests__/auth.service.test.ts`**
-    - [ ] `test('verifyToken authenticates valid tokens')`
-    - [ ] `test('verifyToken rejects expired tokens')`
-    - [ ] `test('createUser generates new Firebase user')`
-    - [ ] `test('getUserByToken returns correct user information')`
-
-11. **`services/__tests__/wallet.service.test.ts`**
-    - [ ] `test('getAvailableWallet finds unused wallet')`
-    - [ ] `test('assignWallet connects wallet to user')`
-    - [ ] `test('validateWalletAddress checks address format')`
-    - [ ] `test('getWalletBalance retrieves correct balance')`
-
-12. **`services/__tests__/rental.service.test.ts`**
-    - [ ] `test('createRentalAgreement initializes contract')`
-    - [ ] `test('getRentalDetails fetches contract details')`
-    - [ ] `test('trackRentalStatus monitors rental state')`
-    - [ ] `test('processRentPayment handles payment correctly')`
-
-13. **`services/__tests__/loan.service.test.ts`**
-    - [ ] `test('createLoanRequest processes request data')`
-    - [ ] `test('approveLoanRequest creates loan agreement')`
-    - [ ] `test('getLoanDetails fetches agreement details')`
-    - [ ] `test('calculateRepayment determines correct amounts')`
-    - [ ] `test('trackLoanStatus monitors loan state')`
-
-### Utils
-
-14. **`utils/__tests__/ethers.utils.test.ts`**
-    - [ ] `test('connectToProvider establishes connection')`
-    - [ ] `test('signTransaction creates valid transaction')`
-    - [ ] `test('verifySignature validates signature')`
-    - [ ] `test('getGasPrice estimates correct gas price')`
-
-15. **`utils/__tests__/validation.utils.test.ts`**
-    - [ ] `test('isValidEmail validates email format')`
-    - [ ] `test('isValidEthAddress validates Ethereum addresses')`
-    - [ ] `test('sanitizeInput removes dangerous characters')`
-    - [ ] `test('validateFields checks all required fields')`
-
 ### Database Interactions
 
-16. **`models/__tests__/index.test.ts`**
+10. **`models/__tests__/index.test.ts`**
     - [ ] `test('database connection initializes')`
     - [ ] `test('models are registered correctly')`
     - [ ] `test('associations are established properly')`

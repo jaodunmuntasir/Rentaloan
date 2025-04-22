@@ -96,27 +96,27 @@
 
 ### Page Components
 
-11. **`src/pages/__tests__/Login.test.tsx`**
+8. **`src/pages/__tests__/Login.test.tsx`**
     - [ ] `test('renders login form correctly')`
     - [ ] `test('shows validation errors for empty fields')`
     - [ ] `test('submits form with valid data')`
     - [ ] `test('shows error message on failed login')`
     - [ ] `test('redirects after successful login')`
 
-12. **`src/pages/__tests__/Dashboard.test.tsx`**
+9. **`src/pages/__tests__/Dashboard.test.tsx`**
     - [ ] `test('renders user information correctly')`
     - [ ] `test('displays wallet information')`
     - [ ] `test('shows rental agreement summaries')`
     - [ ] `test('shows loan agreement summaries')`
     - [ ] `test('displays fallback UI when API fails')`
 
-13. **`src/pages/rental/__tests__/Create.test.tsx`**
+10. **`src/pages/rental/__tests__/Create.test.tsx`**
     - [ ] `test('validates all required fields')`
     - [ ] `test('calculates security deposit correctly')`
     - [ ] `test('creates rental agreement with valid data')`
     - [ ] `test('handles form submission errors')`
 
-14. **`src/pages/loan/__tests__/RequestCreate.test.tsx`**
+11. **`src/pages/loan/__tests__/RequestCreate.test.tsx`**
     - [ ] `test('calculates loan amounts correctly')`
     - [ ] `test('validates all loan parameters')`
     - [ ] `test('shows repayment schedule preview')`
@@ -125,7 +125,7 @@
 
 ### UI Components
 
-15. **`src/components/dashboard/__tests__/WalletInfo.test.tsx`**
+12. **`src/components/dashboard/__tests__/WalletInfo.test.tsx`**
     - [ ] `test('displays wallet address correctly')`
     - [ ] `test('shows wallet balance in ETH')`
     - [ ] `test('handles connect wallet button click')`
@@ -135,16 +135,7 @@
 
 ```bash
 # Run all tests
-npm test
-
-# Run tests with coverage report
-npm test -- --coverage
-
-# Run specific test file
-npm test -- src/services/__tests__/blockchain.service.test.ts
-
-# Run tests in watch mode during development
-npm test -- --watch
+npm run test:all
 ```
 
 ## Test Patterns
